@@ -8,13 +8,23 @@ import heapq
 #서버별 독립적인 데이터를 저장할 딕셔너리
 server_queues = {}
 server_played_number = {}
+server_users = {}
 
 def get_server_data(guild_id):
     if guild_id not in server_queues:
         server_queues[guild_id] = deque()
     if guild_id not in server_played_number:
         server_played_number[guild_id] = {}
-    return server_queues[guild_id], server_played_number[guild_id]
+    if guild_id not in server_users:
+        server_users[guild_id] = {}
+    return server_queues[guild_id], server_played_number[guild_id], server_users[guild_id]
+
+def print_top3(content):
+    top_3 = heapq.nlargest(3, content.items(), key = lambda x : x[1])
+    message_temp = ''
+    for i in range(len(top_3)):
+        message_temp += f'{i+1} 위 {top_3[i][0]} : {top_3[i][1]} 회 재생 됨 \n'
+    return message_temp
 
 class youtube(commands.Cog):
     def __init__(self, bot):
@@ -28,7 +38,7 @@ class youtube(commands.Cog):
     def play_next(self, ctx):
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id 
-        deq, played_number = get_server_data(guild_id)
+        deq, played_number, user = get_server_data(guild_id)
 
         if len(deq) > 0:
             next_play = deq.popleft()
@@ -40,12 +50,20 @@ class youtube(commands.Cog):
             else:
                 played_number[next_play[1]] = 1
 
+            if next_play[2] in user: #신청인이 유저리스트에 있는 경우
+                if next_play[1] in user[next_play[2]]:
+                    user[next_play[2]][next_play[1]] += 1
+                else:
+                    user[next_play[2]][next_play[1]] = 1
+            else:
+                user[next_play[2]] = {next_play[1] : 1} #새로 만드는 경우, 신청인 이름 : {곡제목 : 재생횟수}
+
     @commands.command(name="play")
     async def play(self, ctx, url: str):
         """유튜브 링크를 가져오면 음악을 재생한다."""
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id 
-        deq, played_number = get_server_data(guild_id)
+        deq, _, _ = get_server_data(guild_id)
 
         try:
             # 음성 채널에 연결
@@ -61,9 +79,13 @@ class youtube(commands.Cog):
                 song = data['url']
                 title = data['title']
                 player = discord.FFmpegPCMAudio(song, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
+                applicant = ctx.author.name
 
-                deq.append([player, title])
-                await ctx.channel.send(f'대기열 {len(deq)}번 입니다.', reference = ctx.message)
+                deq.append([player, title, applicant]) #곡의 정보, 제목, 그 곡의 신청자이름
+                if voice_client.is_playing():
+                    await ctx.channel.send(f'대기열 {len(deq)}번 입니다.', reference = ctx.message)
+                else:
+                    await ctx.channel.send(f'대기열 0번 입니다.', reference = ctx.message)
 
                 # 음악 재생
                 if not voice_client.is_playing():
@@ -81,9 +103,15 @@ class youtube(commands.Cog):
         """현재 대기열이 몇 개의 음악이 남았는지 알려준다."""
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id 
-        deq, played_number = get_server_data(guild_id)
+        deq, _, _ = get_server_data(guild_id)
 
-        await ctx.channel.send(f'{len(deq)} 노래가 남았습니다.', reference = ctx.message)
+        if len(deq) == 0: #큐가 비었을 경우. 
+            await ctx.channel.send("음악큐가 비어있습니다.")
+            return
+        message_temp = ''
+        for i in range(len(deq)):
+            message_temp += f'대기열 {i+1}번 - 추가자({deq[i][2]}): {deq[i][1]} \n'
+        await ctx.channel.send(message_temp, reference = ctx.message)
 
     @commands.command(name = "skip")
     async def skip(self, ctx):
@@ -109,26 +137,35 @@ class youtube(commands.Cog):
         """해당 서버에서 가장 많이 재생된 음악 top3를 알려준다."""
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id 
-        deq, played_number = get_server_data(guild_id)
+        _, played_number, _ = get_server_data(guild_id)
 
-        top_3 = heapq.nlargest(3, played_number.items(), key = lambda x : x[1])
-        message_temp = ''
-        for i in range(len(top_3)):
-            message_temp += f'{i+1} 위 {top_3[i][0]} : {top_3[i][1]} 회 재생 됨 \n'
+        message_temp = print_top3(played_number)
         await ctx.channel.send(message_temp)
 
     @commands.command(name = "count")
-    async def count(self, ctx, title):
+    async def count(self, ctx, title:str):
         """노래 제목(유튜브 제목이랑 완전히 같을 것)을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다."""
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id 
-        deq, played_number = get_server_data(guild_id)
+        _, played_number, _ = get_server_data(guild_id)
 
         if title in played_number:
             await ctx.send(f'{played_number[title]} 회 재생 됨')
         else:
             await ctx.send("재생되지 않은 음악입니다.")
 
+    @commands.command(name = "find")
+    async def find(self, ctx):
+        """find 뒤에 유저명을 입력하면, 그 유저의 top3 정보를 알려준다."""
+        guild_id = ctx.guild.id
 
+        applicant = ctx.author.name
+        _, _, user = get_server_data(guild_id)
+
+        if applicant in user:
+            message_temp = print_top3(user[applicant])
+            await ctx.send(message_temp) 
+        else:
+            await ctx.send("현재까지 재생하지 않았거나, 서버에 없습니다.")
 async def setup(bot):
     await bot.add_cog(youtube(bot))

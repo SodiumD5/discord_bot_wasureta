@@ -29,7 +29,3 @@ class basic(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(basic(bot))
-
-
-#대충 아무의미 없는 커밋을 위한 주석
-a = 1

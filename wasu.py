@@ -31,6 +31,6 @@ async def load_cogs():
             except Exception as e:
                 print(f'{filename} : {e}')
 
-print("hi")
+
 #봇 실행
 bot.run(TOKEN)
