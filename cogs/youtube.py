@@ -30,20 +30,21 @@ class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    yt_dl_opts = {'format': 'bestaudio[ext=webm]'}
+    yt_dl_opts = {'format': 'bestaudio[ext=webm]', 'extract_flat' : 'in_playlist'}
     ytdl = yt_dlp.YoutubeDL(yt_dl_opts)
     ffmpeg_options = {'options' : '-vn', 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'}
 
     #음악 채워주는 함수
-    def play_next(self, ctx):
+    async def play_next(self, ctx):
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id 
         deq, played_number, user = get_server_data(guild_id)
 
         if len(deq) > 0:
             next_play = deq.popleft()
-            ctx.guild.voice_client.play(next_play[0], after = lambda e : (print(f'Error {e}') if e else self.play_next(ctx)))
-
+            ctx.guild.voice_client.play(next_play[0], after= lambda e: asyncio.run_coroutine_threadsafe(
+                self.handle_after_callback(ctx, e), ctx.bot.loop
+            ))
             #그 음악이 틀어진 횟수를 넣기. 재생이 된 노래만 카운트. 대기열에 올라간 노래는 아직 카운트 x
             if next_play[1] in played_number:
                 played_number[next_play[1]] += 1
@@ -58,38 +59,101 @@ class youtube(commands.Cog):
             else:
                 user[next_play[2]] = {next_play[1] : 1} #새로 만드는 경우, 신청인 이름 : {곡제목 : 재생횟수}
 
-    @commands.command(name="play")
-    async def play(self, ctx, url: str):
-        """유튜브 링크를 가져오면 음악을 재생한다."""
-        #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
+    async def handle_after_callback(self, ctx, error):
+        if error:
+            print(f"Playback error: {error}")
+        else:
+            # 다음 곡을 비동기로 재생
+            await self.play_next(ctx)
+    
+    def sodiumd_extract_info(self, url):
+        with yt_dlp.YoutubeDL(self.yt_dl_opts) as ydl:
+            data = ydl.extract_info(url, download=False)
+        return data
+
+    #첫 곡을 먼저 재생 던져 놓는 함수 (이면서, 한 곡 던져두면, 그 한곡만 처리시켜주는 함수)
+    async def one_song_player(self, first_song_data, applicant, deq):
+        loop = asyncio.get_event_loop()
+        video_id = first_song_data['id']
+        video_url = f'https://www.youtube.com/watch?v={video_id}'
+
+        #새로 url을 만들어서 그 url을 다시 데이터로 변환시킴. 
+        video_data = await loop.run_in_executor(None, self.sodiumd_extract_info, video_url)
+
+        song = video_data['url']
+        title = video_data['title']
+        music_info = discord.FFmpegPCMAudio(song, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
+        deq.append([music_info, title, applicant])
+
+    #남은 곡을 재생시키는 함수
+    async def left_song_player(self, left_song_data, applicant, deq):
+        tasks = []
+        for entry in left_song_data:
+            task = asyncio.create_task(self.one_song_player(entry, applicant, deq))
+            tasks.append(task)
+        
+        await asyncio.gather(*tasks)
+
+    async def append_music(self, ctx, url, applicant, voice_client):
         guild_id = ctx.guild.id 
         deq, _, _ = get_server_data(guild_id)
 
+        # YouTube에서 오디오 스트림 가져오기
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, self.sodiumd_extract_info, url)
+        
+        #플레이리스트일 때
+        #'entries'가 딕셔너리에 있을 경우는 플리임.
+        if 'entries' in data:
+            data_entries = data['entries']
+            is_playlist = len(data_entries) #총 몇개의 노래인지
+            first_song = data_entries[0]
+            
+            #첫 곡 던져두기
+            await self.one_song_player(first_song, applicant, deq)
+            await self.call_executer(ctx, voice_client, is_playlist) 
+
+            #나머지 곡 처리
+            asyncio.create_task(self.left_song_player(data_entries[1:], applicant, deq))
+
+        #플레이리스트가 아닐 때
+        else:
+            is_playlist = 1 #플리가 아닐 경우 1곡임. 
+            song = data['url']
+            title = data['title']
+            music_info = discord.FFmpegPCMAudio(song, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
+            deq.append([music_info, title, applicant]) #곡의 정보, 제목, 그 곡의 신청자이름
+
+            await self.call_executer(ctx, voice_client, is_playlist)
+
+    async def call_executer(self, ctx, voice_client, is_playlist):
+        guild_id = ctx.guild.id 
+        deq, _, _ = get_server_data(guild_id)
+        
+        if voice_client.is_playing():
+            await ctx.channel.send(f'{is_playlist}곡이 대기열 {len(deq)}번에 추가 되었습니다.', reference = ctx.message)
+        else:
+            await ctx.channel.send(f'{is_playlist}곡이 대기열 0번에 추가 되었습니다.', reference = ctx.message)
+
+        # 음악 재생
+        if not voice_client.is_playing():
+            await self.play_next(ctx)
+
+
+    @commands.command(name="play")
+    async def play(self, ctx, url: str):
+        """유튜브 링크를 가져오면 음악을 재생한다."""
         try:
             # 음성 채널에 연결
             if ctx.author.voice: #사용자가 음성채널에 들어가 있는지. 들어가 있으면 True
                 voice_client = ctx.guild.voice_client
+                applicant = ctx.author.name #신청자 정보
+
                 if not voice_client: #봇이 연결이 안되어 있을 경우, 연결시키기
                     voice_client = await ctx.author.voice.channel.connect() 
 
-                # YouTube에서 오디오 스트림 가져오기
-                loop = asyncio.get_event_loop()
-                data = await loop.run_in_executor(None, lambda: self.ytdl.extract_info(url, download=False)) #url 정보를 뽑아서 저장하는 딕셔너리임
-
-                song = data['url']
-                title = data['title']
-                player = discord.FFmpegPCMAudio(song, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
-                applicant = ctx.author.name
-
-                deq.append([player, title, applicant]) #곡의 정보, 제목, 그 곡의 신청자이름
-                if voice_client.is_playing():
-                    await ctx.channel.send(f'대기열 {len(deq)}번 입니다.', reference = ctx.message)
-                else:
-                    await ctx.channel.send(f'대기열 0번 입니다.', reference = ctx.message)
-
-                # 음악 재생
-                if not voice_client.is_playing():
-                    self.play_next(ctx)
+                await self.append_music(ctx, url, applicant, voice_client)
+                
 
             else:
                 await ctx.send("먼저 음성 채널에 들어가 주세요")
@@ -109,7 +173,7 @@ class youtube(commands.Cog):
             await ctx.channel.send("음악큐가 비어있습니다.")
             return
         message_temp = ''
-        for i in range(len(deq)):
+        for i in range(min(40, len(deq))):
             message_temp += f'대기열 {i+1}번 - 추가자({deq[i][2]}): {deq[i][1]} \n'
         await ctx.channel.send(message_temp, reference = ctx.message)
 
@@ -119,7 +183,7 @@ class youtube(commands.Cog):
         voice_client = ctx.guild.voice_client
         if voice_client and voice_client.is_playing():
             voice_client.stop()
-            self.play_next(ctx)
+            await self.play_next(ctx)
         else:
             await ctx.send("현재 재생 중이 아니거나, 통화방에 없습니다.")
 
