@@ -4,6 +4,7 @@ import discord
 import asyncio
 import yt_dlp
 import heapq
+import functools
 
 #서버별 독립적인 데이터를 저장할 딕셔너리
 server_queues = {}
@@ -25,6 +26,22 @@ def print_top3(content):
     for i in range(len(top_3)):
         message_temp += f'{i+1} 위 {top_3[i][0]} : {top_3[i][1]} 회 재생 됨 \n'
     return message_temp
+
+#함수를 감싸줌.
+def wasu_think(func): 
+    @functools.wraps(func)
+    async def wasu_think_wrap(*args, **kwargs):
+        ctx = args[1]
+        if ctx.interaction:
+            await ctx.interaction.response.defer()
+        return await func(*args, **kwargs)
+    return wasu_think_wrap
+
+async def smart_send(ctx, content, **kwargs):
+    if ctx.interaction:
+        await ctx.interaction.followup.send(content)
+    else:
+        await ctx.send(content, reference = ctx.message)
 
 class youtube(commands.Cog):
     def __init__(self, bot):
@@ -106,7 +123,7 @@ class youtube(commands.Cog):
         #'entries'가 딕셔너리에 있을 경우는 플리임.
         if 'entries' in data:
             data_entries = data['entries']
-            is_playlist = len(data_entries) #총 몇개의 노래인지
+            is_playlist = min(len(data_entries), 50) #총 몇개의 노래인지
             first_song = data_entries[0]
             
             #첫 곡 던져두기
@@ -114,7 +131,7 @@ class youtube(commands.Cog):
             await self.call_executer(ctx, voice_client, is_playlist) 
 
             #나머지 곡 처리
-            asyncio.create_task(self.left_song_player(data_entries[1:], applicant, deq))
+            asyncio.create_task(self.left_song_player(data_entries[1:50], applicant, deq)) #최대깊이 50곡으로 제한
 
         #플레이리스트가 아닐 때
         else:
@@ -131,19 +148,22 @@ class youtube(commands.Cog):
         deq, _, _ = get_server_data(guild_id)
         
         if voice_client.is_playing():
-            await ctx.channel.send(f'{is_playlist}곡이 대기열 {len(deq)}번에 추가 되었습니다.', reference = ctx.message)
+            await smart_send(ctx, f'{is_playlist}곡이 대기열 {len(deq)}번에 추가 되었습니다.')
         else:
-            await ctx.channel.send(f'{is_playlist}곡이 대기열 0번에 추가 되었습니다.', reference = ctx.message)
+            await smart_send(ctx, f'{is_playlist}곡이 대기열 0번에 추가 되었습니다.')
 
         # 음악 재생
         if not voice_client.is_playing():
             await self.play_next(ctx)
 
 
-    @commands.command(name="play")
+    @commands.hybrid_command(name="play", description = "유튜브 링크를 가져오면 음악을 재생한다")
+    @wasu_think
     async def play(self, ctx, url: str):
         """유튜브 링크를 가져오면 음악을 재생한다."""
         try:
+            if ctx.interaction:
+                print("interaction")
             # 음성 채널에 연결
             if ctx.author.voice: #사용자가 음성채널에 들어가 있는지. 들어가 있으면 True
                 voice_client = ctx.guild.voice_client
@@ -154,7 +174,6 @@ class youtube(commands.Cog):
 
                 await self.append_music(ctx, url, applicant, voice_client)
                 
-
             else:
                 await ctx.send("먼저 음성 채널에 들어가 주세요")
 
@@ -162,7 +181,8 @@ class youtube(commands.Cog):
             print(err)
             await ctx.send("오류가 발생하여 음악을 재생할 수 없습니다.")
 
-    @commands.command(name = "que")
+    @commands.hybrid_command(name = "que", description = "현재 대기열이 몇 개의 음악이 남았는지 알려준다")
+    @wasu_think
     async def left_que(self, ctx):
         """현재 대기열이 몇 개의 음악이 남았는지 알려준다."""
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
@@ -170,14 +190,16 @@ class youtube(commands.Cog):
         deq, _, _ = get_server_data(guild_id)
 
         if len(deq) == 0: #큐가 비었을 경우. 
-            await ctx.channel.send("음악큐가 비어있습니다.")
+            await smart_send(ctx, "음악큐가 비어있습니다.")
             return
-        message_temp = ''
-        for i in range(min(40, len(deq))):
+        message_temp = f'대기열에 총 {len(deq)}개의 곡이 존재합니다. \n'
+        for i in range(min(20, len(deq))):
             message_temp += f'대기열 {i+1}번 - 추가자({deq[i][2]}): {deq[i][1]} \n'
-        await ctx.channel.send(message_temp, reference = ctx.message)
 
-    @commands.command(name = "skip")
+        await smart_send(ctx, message_temp)
+
+    @commands.hybrid_command(name = "skip", description = "현재 재생 중인 음악을 스킵한다.")
+    @wasu_think
     async def skip(self, ctx):
         """현재 재생 중인 음악을 스킵한다."""
         voice_client = ctx.guild.voice_client
@@ -185,18 +207,22 @@ class youtube(commands.Cog):
             voice_client.stop()
             await self.play_next(ctx)
         else:
-            await ctx.send("현재 재생 중이 아니거나, 통화방에 없습니다.")
+            await smart_send(ctx, "현재 재생 중이 아니거나, 통화방에 없습니다.")
 
-    @commands.command(name = "pause")
+    @commands.hybrid_command(name = "pause", description = "현재 재생 중인 음악을 정지하거나 재개한다.")
+    @wasu_think
     async def pause(self, ctx):
         """현재 재생 중인 음악을 정지하거나 재개한다."""
         voice_client = ctx.guild.voice_client
         if voice_client.is_playing():
             voice_client.pause()
+            smart_send(ctx, "정지하였습니다.")
         else:
             voice_client.resume()
+            smart_send(ctx, "다시 시작하였습니다.")
 
-    @commands.command(name = "rank")
+    @commands.hybrid_command(name = "rank", description = "해당 서버에서 가장 많이 재생된 음악 top3를 알려준다.")
+    @wasu_think
     async def rank(self, ctx):
         """해당 서버에서 가장 많이 재생된 음악 top3를 알려준다."""
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
@@ -204,21 +230,23 @@ class youtube(commands.Cog):
         _, played_number, _ = get_server_data(guild_id)
 
         message_temp = print_top3(played_number)
-        await ctx.channel.send(message_temp)
+        await smart_send(ctx, message_temp)
 
-    @commands.command(name = "count")
+    @commands.hybrid_command(name = "count", description = "노래 제목(유튜브 제목이랑 완전히 같을 것)을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다.")
+    @wasu_think
     async def count(self, ctx, title:str):
-        """노래 제목(유튜브 제목이랑 완전히 같을 것)을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다."""
+        """노래 제목(유튜브 제목이랑 완전히 같을 것)을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다."""        
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id 
         _, played_number, _ = get_server_data(guild_id)
 
         if title in played_number:
-            await ctx.send(f'{played_number[title]} 회 재생 됨')
+            await smart_send(ctx, f'{played_number[title]} 회 재생 됨')
         else:
-            await ctx.send("재생되지 않은 음악입니다.")
+            await smart_send(ctx, "재생되지 않은 음악입니다.")
 
-    @commands.command(name = "find")
+    @commands.hybrid_command(name = "find", description = "find 뒤에 유저명을 입력하면, 그 유저의 top3 정보를 알려준다.!")
+    @wasu_think
     async def find(self, ctx):
         """find 뒤에 유저명을 입력하면, 그 유저의 top3 정보를 알려준다."""
         guild_id = ctx.guild.id
@@ -228,8 +256,9 @@ class youtube(commands.Cog):
 
         if applicant in user:
             message_temp = print_top3(user[applicant])
-            await ctx.send(message_temp) 
+            await smart_send(ctx, message_temp) 
         else:
-            await ctx.send("현재까지 재생하지 않았거나, 서버에 없습니다.")
+            await smart_send(ctx, "현재까지 재생하지 않았거나, 서버에 없습니다.")
+
 async def setup(bot):
     await bot.add_cog(youtube(bot))

@@ -1,6 +1,5 @@
 from discord.ext import commands
 import discord
-import asyncio
 import os
 from dotenv import load_dotenv
 
@@ -30,7 +29,7 @@ async def load_cogs():
                 print(f'{filename} : success')
             except Exception as e:
                 print(f'{filename} : {e}')
-
+    await bot.tree.sync()
 
 #봇 실행
 bot.run(TOKEN)
