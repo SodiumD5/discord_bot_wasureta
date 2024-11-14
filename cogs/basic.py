@@ -9,8 +9,10 @@ class basic(commands.Cog):
     @commands.hybrid_command(name = "---", description = "선을 그린다")
     async def draw_line(self, ctx):
         """선을 그린다"""
-        #await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
         await ctx.send(f'```ansi\n[2;34m{"-"*50}[0m\n```')
+
 
     #ping날리기
     @commands.hybrid_command(name = "ping", description = "ping을 날린다")

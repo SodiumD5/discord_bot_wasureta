@@ -37,7 +37,7 @@ def wasu_think(func):
         return await func(*args, **kwargs)
     return wasu_think_wrap
 
-async def smart_send(ctx, content, **kwargs):
+async def smart_send(ctx, content):
     if ctx.interaction:
         await ctx.interaction.followup.send(content)
     else:
@@ -47,7 +47,7 @@ class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    yt_dl_opts = {'format': 'bestaudio[ext=webm]', 'extract_flat' : 'in_playlist'}
+    yt_dl_opts = {'format': 'bestaudio[ext=webm]', 'extract_flat' : 'in_playlist', 'ratelimit' : 0}
     ytdl = yt_dlp.YoutubeDL(yt_dl_opts)
     ffmpeg_options = {'options' : '-vn', 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'}
 
@@ -89,7 +89,7 @@ class youtube(commands.Cog):
         return data
 
     #첫 곡을 먼저 재생 던져 놓는 함수 (이면서, 한 곡 던져두면, 그 한곡만 처리시켜주는 함수)
-    async def one_song_player(self, first_song_data, applicant, deq):
+    async def one_song_player(self, first_song_data, applicant):
         loop = asyncio.get_event_loop()
         video_id = first_song_data['id']
         video_url = f'https://www.youtube.com/watch?v={video_id}'
@@ -100,16 +100,18 @@ class youtube(commands.Cog):
         song = video_data['url']
         title = video_data['title']
         music_info = discord.FFmpegPCMAudio(song, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
-        deq.append([music_info, title, applicant])
+        return ([music_info, title, applicant])
 
     #남은 곡을 재생시키는 함수
     async def left_song_player(self, left_song_data, applicant, deq):
-        tasks = []
-        for entry in left_song_data:
-            task = asyncio.create_task(self.one_song_player(entry, applicant, deq))
-            tasks.append(task)
+        tasks = [
+            asyncio.create_task(self.one_song_player(entry, applicant))
+            for entry in left_song_data
+        ]
+        que_datas = await asyncio.gather(*tasks)
         
-        await asyncio.gather(*tasks)
+        for que_data in que_datas:
+            deq.append(que_data)
 
     async def append_music(self, ctx, url, applicant, voice_client):
         guild_id = ctx.guild.id 
@@ -123,11 +125,12 @@ class youtube(commands.Cog):
         #'entries'가 딕셔너리에 있을 경우는 플리임.
         if 'entries' in data:
             data_entries = data['entries']
-            is_playlist = min(len(data_entries), 50) #총 몇개의 노래인지
+            is_playlist = min(len(data_entries), 50) #총 몇개의 노래인지(최대 50개)
             first_song = data_entries[0]
             
             #첫 곡 던져두기
-            await self.one_song_player(first_song, applicant, deq)
+            first_song_info = await self.one_song_player(first_song, applicant)
+            deq.append(first_song_info)
             await self.call_executer(ctx, voice_client, is_playlist) 
 
             #나머지 곡 처리
@@ -162,8 +165,6 @@ class youtube(commands.Cog):
     async def play(self, ctx, url: str):
         """유튜브 링크를 가져오면 음악을 재생한다."""
         try:
-            if ctx.interaction:
-                print("interaction")
             # 음성 채널에 연결
             if ctx.author.voice: #사용자가 음성채널에 들어가 있는지. 들어가 있으면 True
                 voice_client = ctx.guild.voice_client
@@ -175,11 +176,11 @@ class youtube(commands.Cog):
                 await self.append_music(ctx, url, applicant, voice_client)
                 
             else:
-                await ctx.send("먼저 음성 채널에 들어가 주세요")
+                await smart_send(ctx, "먼저 음성 채널에 들어가 주세요")
 
         except Exception as err:
             print(err)
-            await ctx.send("오류가 발생하여 음악을 재생할 수 없습니다.")
+            await smart_send(ctx, "오류가 발생하여 음악을 재생할 수 없습니다.")
 
     @commands.hybrid_command(name = "que", description = "현재 대기열이 몇 개의 음악이 남았는지 알려준다")
     @wasu_think
@@ -206,6 +207,7 @@ class youtube(commands.Cog):
         if voice_client and voice_client.is_playing():
             voice_client.stop()
             await self.play_next(ctx)
+            await smart_send(ctx, "다음 노래가 재생됩니다.")
         else:
             await smart_send(ctx, "현재 재생 중이 아니거나, 통화방에 없습니다.")
 
@@ -259,6 +261,19 @@ class youtube(commands.Cog):
             await smart_send(ctx, message_temp) 
         else:
             await smart_send(ctx, "현재까지 재생하지 않았거나, 서버에 없습니다.")
+
+    @commands.hybrid_command(name = "is_play", description = "재생 중인지 알려줌")
+    @wasu_think
+    async def find(self, ctx):
+        voice_client = ctx.guild.voice_client
+        guild_id = ctx.guild.id 
+        deq, _, _ = get_server_data(guild_id)
+
+        if voice_client.is_playing():
+            await smart_send(ctx, "재생 중")
+        else:
+            await smart_send(ctx, "재생 중 아님")
+            print(deq)
 
 async def setup(bot):
     await bot.add_cog(youtube(bot))
