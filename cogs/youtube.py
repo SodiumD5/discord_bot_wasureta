@@ -5,6 +5,11 @@ import asyncio
 import yt_dlp
 import heapq
 import functools
+import sys, os
+
+#최상위 디렉토리로 올라가기
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import to_mysql
 
 #서버별 독립적인 데이터를 저장할 딕셔너리
 server_queues = {}
@@ -47,7 +52,7 @@ class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    yt_dl_opts = {'format': 'bestaudio[ext=webm]', 'extract_flat' : 'in_playlist', 'ratelimit' : 0}
+    yt_dl_opts = {'format': 'best', 'extract_flat' : 'in_playlist', 'ratelimit' : 0}
     ytdl = yt_dlp.YoutubeDL(yt_dl_opts)
     ffmpeg_options = {'options' : '-vn', 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'}
 
@@ -62,6 +67,11 @@ class youtube(commands.Cog):
             ctx.guild.voice_client.play(next_play[0], after= lambda e: asyncio.run_coroutine_threadsafe(
                 self.handle_after_callback(ctx, e), ctx.bot.loop
             ))
+
+            #sql 넣기
+            print(guild_id, next_play[2], next_play[1])
+            to_mysql.update_sql(guild_id, next_play[2], next_play[1])
+
             #그 음악이 틀어진 횟수를 넣기. 재생이 된 노래만 카운트. 대기열에 올라간 노래는 아직 카운트 x
             if next_play[1] in played_number:
                 played_number[next_play[1]] += 1
@@ -151,9 +161,9 @@ class youtube(commands.Cog):
         deq, _, _ = get_server_data(guild_id)
         
         if voice_client.is_playing():
-            await smart_send(ctx, f'{is_playlist}곡이 대기열 {len(deq)}번에 추가 되었습니다.')
+            await smart_send(ctx, f'{is_playlist}곡이 대기열 {len(deq)}번부터 추가 되었습니다.')
         else:
-            await smart_send(ctx, f'{is_playlist}곡이 대기열 0번에 추가 되었습니다.')
+            await smart_send(ctx, f'{is_playlist}곡이 대기열 0번부터 추가 되었습니다.')
 
         # 음악 재생
         if not voice_client.is_playing():
