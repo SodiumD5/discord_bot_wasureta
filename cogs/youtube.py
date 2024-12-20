@@ -3,7 +3,6 @@ from collections import deque
 import discord
 import asyncio
 import yt_dlp
-import heapq
 import functools
 import sys, os
 
@@ -13,24 +12,12 @@ import to_mysql
 
 #서버별 독립적인 데이터를 저장할 딕셔너리
 server_queues = {}
-server_played_number = {}
-server_users = {}
 
 def get_server_data(guild_id):
     if guild_id not in server_queues:
         server_queues[guild_id] = deque()
-    if guild_id not in server_played_number:
-        server_played_number[guild_id] = {}
-    if guild_id not in server_users:
-        server_users[guild_id] = {}
-    return server_queues[guild_id], server_played_number[guild_id], server_users[guild_id]
 
-def print_top3(content):
-    top_3 = heapq.nlargest(3, content.items(), key = lambda x : x[1])
-    message_temp = ''
-    for i in range(len(top_3)):
-        message_temp += f'{i+1} 위 {top_3[i][0]} : {top_3[i][1]} 회 재생 됨 \n'
-    return message_temp
+    return server_queues[guild_id]
 
 #함수를 감싸줌.
 def wasu_think(func): 
@@ -60,7 +47,7 @@ class youtube(commands.Cog):
     async def play_next(self, ctx):
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id 
-        deq, played_number, user = get_server_data(guild_id)
+        deq= get_server_data(guild_id)
 
         if len(deq) > 0:
             next_play = deq.popleft()
@@ -70,21 +57,7 @@ class youtube(commands.Cog):
 
             #sql 넣기
             print(guild_id, next_play[2], next_play[1])
-            to_mysql.update_sql(guild_id, next_play[2], next_play[1])
-
-            #그 음악이 틀어진 횟수를 넣기. 재생이 된 노래만 카운트. 대기열에 올라간 노래는 아직 카운트 x
-            if next_play[1] in played_number:
-                played_number[next_play[1]] += 1
-            else:
-                played_number[next_play[1]] = 1
-
-            if next_play[2] in user: #신청인이 유저리스트에 있는 경우
-                if next_play[1] in user[next_play[2]]:
-                    user[next_play[2]][next_play[1]] += 1
-                else:
-                    user[next_play[2]][next_play[1]] = 1
-            else:
-                user[next_play[2]] = {next_play[1] : 1} #새로 만드는 경우, 신청인 이름 : {곡제목 : 재생횟수}
+            to_mysql.add_sql(guild_id, next_play[2], next_play[1])
 
     async def handle_after_callback(self, ctx, error):
         if error:
@@ -125,7 +98,7 @@ class youtube(commands.Cog):
 
     async def append_music(self, ctx, url, applicant, voice_client):
         guild_id = ctx.guild.id 
-        deq, _, _ = get_server_data(guild_id)
+        deq= get_server_data(guild_id)
 
         # YouTube에서 오디오 스트림 가져오기
         loop = asyncio.get_event_loop()
@@ -158,12 +131,18 @@ class youtube(commands.Cog):
 
     async def call_executer(self, ctx, voice_client, is_playlist):
         guild_id = ctx.guild.id 
-        deq, _, _ = get_server_data(guild_id)
+        deq = get_server_data(guild_id)
         
         if voice_client.is_playing():
-            await smart_send(ctx, f'{is_playlist}곡이 대기열 {len(deq)}번부터 추가 되었습니다.')
+            if is_playlist == 1:
+                await smart_send(ctx, f'{is_playlist}곡이 대기열 {len(deq)}번에 추가 되었습니다.')
+            else:
+                await smart_send(ctx, f'{is_playlist}곡이 대기열 {len(deq)}번부터 {len(deq)+is_playlist-1}번까지 추가 되었습니다.')
         else:
-            await smart_send(ctx, f'{is_playlist}곡이 대기열 0번부터 추가 되었습니다.')
+            if is_playlist == 1:
+                await smart_send(ctx, f'{is_playlist}곡이 대기열 0번에 추가 되었습니다.')
+            else:
+                await smart_send(ctx, f'{is_playlist}곡이 대기열 0번부터 {len(deq)+is_playlist-1}번까지 추가 되었습니다.')
 
         # 음악 재생
         if not voice_client.is_playing():
@@ -198,7 +177,7 @@ class youtube(commands.Cog):
         """현재 대기열이 몇 개의 음악이 남았는지 알려준다."""
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id 
-        deq, _, _ = get_server_data(guild_id)
+        deq = get_server_data(guild_id)
 
         if len(deq) == 0: #큐가 비었을 경우. 
             await smart_send(ctx, "음악큐가 비어있습니다.")
@@ -228,56 +207,64 @@ class youtube(commands.Cog):
         voice_client = ctx.guild.voice_client
         if voice_client.is_playing():
             voice_client.pause()
-            smart_send(ctx, "정지하였습니다.")
+            await smart_send(ctx, "정지하였습니다.")
         else:
             voice_client.resume()
-            smart_send(ctx, "다시 시작하였습니다.")
+            await smart_send(ctx, "다시 시작하였습니다.")
 
-    @commands.hybrid_command(name = "rank", description = "해당 서버에서 가장 많이 재생된 음악 top3를 알려준다.")
+    @commands.hybrid_command(name = "search-server-top3", description = "해당 서버에서 가장 많이 재생된 음악 top3를 알려준다.")
     @wasu_think
     async def rank(self, ctx):
         """해당 서버에서 가장 많이 재생된 음악 top3를 알려준다."""
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
-        guild_id = ctx.guild.id 
-        _, played_number, _ = get_server_data(guild_id)
+        guild_id = ctx.guild.id
+        top3_data = to_mysql.rank(guild_id)
 
-        message_temp = print_top3(played_number)
+        message_temp = ''
+        j = 1
+        for i in top3_data:
+            message_temp += f'{j} 위 {i[2]} : {i[3]} 회 재생 됨 \n'
+            j += 1
+
         await smart_send(ctx, message_temp)
 
-    @commands.hybrid_command(name = "count", description = "노래 제목(유튜브 제목이랑 완전히 같을 것)을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다.")
+    @commands.hybrid_command(name = "search-user-top3", description = "해당 유저의 많이 들은 노래의 순위를 알려준다.")
     @wasu_think
-    async def count(self, ctx, title:str):
-        """노래 제목(유튜브 제목이랑 완전히 같을 것)을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다."""        
+    async def find_user(self, ctx, user_name : str = None):
+        """해당 유저의 많이 들은 노래의 순위를 알려준다."""
+        guild_id = ctx.guild.id
+
+        if user_name == None:
+            user_name = ctx.author.name
+        top3_data = to_mysql.find_user(guild_id, user_name)
+        
+        message_temp = ''
+        j = 1
+        for i in top3_data:
+            message_temp += f'{j} 위 {i[3]} : {i[4]} 회 재생 됨 \n'
+            j += 1
+
+        await smart_send(ctx, message_temp)
+
+    @commands.hybrid_command(name = "how-many-played", description = "노래 제목(유튜브 제목이랑 완전히 같게)을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다.")
+    @wasu_think
+    async def how_many_played(self, ctx, title:str):
+        """노래 제목(유튜브 제목이랑 완전히 같게)을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다."""        
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id 
-        _, played_number, _ = get_server_data(guild_id)
+        played_number_data = to_mysql.find_music(guild_id, title) 
 
-        if title in played_number:
-            await smart_send(ctx, f'{played_number[title]} 회 재생 됨')
+        if played_number_data != ():
+            await smart_send(ctx, f'{played_number_data[0][3]} 회 재생 됨')
         else:
             await smart_send(ctx, "재생되지 않은 음악입니다.")
 
-    @commands.hybrid_command(name = "find", description = "find 뒤에 유저명을 입력하면, 그 유저의 top3 정보를 알려준다.!")
-    @wasu_think
-    async def find(self, ctx):
-        """find 뒤에 유저명을 입력하면, 그 유저의 top3 정보를 알려준다."""
-        guild_id = ctx.guild.id
-
-        applicant = ctx.author.name
-        _, _, user = get_server_data(guild_id)
-
-        if applicant in user:
-            message_temp = print_top3(user[applicant])
-            await smart_send(ctx, message_temp) 
-        else:
-            await smart_send(ctx, "현재까지 재생하지 않았거나, 서버에 없습니다.")
-
-    @commands.hybrid_command(name = "is_play", description = "재생 중인지 알려줌")
+    @commands.hybrid_command(name = "is_play", description = "재생 중인지 알려준다")
     @wasu_think
     async def find(self, ctx):
         voice_client = ctx.guild.voice_client
         guild_id = ctx.guild.id 
-        deq, _, _ = get_server_data(guild_id)
+        deq = get_server_data(guild_id)
 
         if voice_client.is_playing():
             await smart_send(ctx, "재생 중")
