@@ -6,5 +6,7 @@ since 2024.11.01
 
 슬래시 command !command 둘 다 가능. 
 
-해야할 것. 
-rank(서버 top3), count(노래 재생 횟수), find(유저 top3) 명령어를 sql로 가능하게 해야함. 
+함수 호출 구조조
+play -> append_music -> call_executer -> play_next
+play -> append_music -> one_song_player 
+                     -> left_song_player -> one_song_player

@@ -2,6 +2,7 @@ import pymysql
 import os
 from dotenv import load_dotenv
 from prettytable import PrettyTable
+import random
 
 #기본세팅
 def run_sql():
@@ -38,14 +39,16 @@ def add_data(cursor,guild_id, user_name, song_name):
     cursor.execute("SELECT * from users")
 
 #결과 찾기
-def select_guild_data(cursor, guild_id):
-    cursor.execute("""SELECT * FROM wasureta.guild WHERE guild_id = %s ORDER BY repeated DESC LIMIT 10;""", (guild_id,)) #반드시 튜플로 해야함
+def select_guild_data(cursor, guild_id, limit, start_column):
+    cursor.execute("""SELECT * FROM wasureta.guild WHERE guild_id = %s ORDER BY repeated DESC LIMIT %s OFFSET %s;""", #LIMIT는 개수, OFFSET은 시작 행번호호
+                   (guild_id, limit, start_column)) #반드시 튜플로 해야함
     result = cursor.fetchall()
 
     return result
 
-def select_users_data(cursor, guild_id, user_name):
-    cursor.execute("""SELECT * FROM wasureta.users WHERE guild_id = %s AND user_name = %s ORDER BY repeated DESC LIMIT 10;""", (guild_id, user_name)) #반드시 튜플로 해야함
+def select_users_data(cursor, guild_id, user_name, limit, start_column):
+    cursor.execute("""SELECT * FROM wasureta.users WHERE guild_id = %s AND user_name = %s ORDER BY repeated DESC LIMIT %s OFFSET %s;""", 
+                   (guild_id, user_name, limit, start_column)) #반드시 튜플로 해야함
     result = cursor.fetchall()
 
     return result
@@ -82,13 +85,13 @@ def add_sql(guild_id, user_name, song_name):
 
 def rank(guild_id):
     connect, cursor = run_sql()
-    result = select_guild_data(cursor, guild_id)
+    result = select_guild_data(cursor, guild_id, 10, 0)
     disconnect_sql(connect, cursor)
     return result
 
 def find_user(guild_id, user_name):
     connect, cursor = run_sql()
-    result = select_users_data(cursor, guild_id, user_name)
+    result = select_users_data(cursor, guild_id, user_name, 10, 0)
     disconnect_sql(connect, cursor)
     return result
 
@@ -98,3 +101,18 @@ def find_music(guild_id, song_name):
     disconnect_sql(connect, cursor)
     return result
 
+def random_user_playlist(guild_id, user_name, start_num, end_num):
+    connect, cursor = run_sql()
+    start_num -= 1
+    end_num -= 1
+    #유저이름이 없는 경우, 서버에서 찾음음
+    if user_name == None:
+        result = select_guild_data(cursor, guild_id, end_num-start_num+1, start_num)
+    else:
+        result = select_users_data(cursor, guild_id, user_name, end_num-start_num+1, start_num)
+    disconnect_sql(connect, cursor)
+    
+    sample = random.sample(result, min(10, len(result)))
+    return sample
+    
+    

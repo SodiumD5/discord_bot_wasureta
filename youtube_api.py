@@ -12,7 +12,8 @@ def base_setting(search):
     search_response = youtube.search().list(q = search,  # 검색어
                                             order = "relevance", # 정확도순 
                                             part = "snippet",  # 필수매개변수(API 응답이 포함하는 search 리소스 속성 하나 이상의 쉼표로 구분된 목록을 지정)
-                                            maxResults = 1).execute() # 결과 집합에 반환해야 하는 최대 항목 수를 지정 0~50
+                                            maxResults = 1,
+                                            type = "video").execute() # 결과 집합에 반환해야 하는 최대 항목 수를 지정 0~50
                                             # execute()로 수행
     return search_response
 
