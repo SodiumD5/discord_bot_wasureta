@@ -39,13 +39,13 @@ def add_data(cursor,guild_id, user_name, song_name):
 
 #결과 찾기
 def select_guild_data(cursor, guild_id):
-    cursor.execute("""SELECT * FROM wasureta.guild WHERE guild_id = %s ORDER BY repeated DESC LIMIT 3;""", (guild_id,)) #반드시 튜플로 해야함
+    cursor.execute("""SELECT * FROM wasureta.guild WHERE guild_id = %s ORDER BY repeated DESC LIMIT 10;""", (guild_id,)) #반드시 튜플로 해야함
     result = cursor.fetchall()
 
     return result
 
 def select_users_data(cursor, guild_id, user_name):
-    cursor.execute("""SELECT * FROM wasureta.users WHERE guild_id = %s AND user_name = %s ORDER BY repeated DESC LIMIT 3;""", (guild_id, user_name)) #반드시 튜플로 해야함
+    cursor.execute("""SELECT * FROM wasureta.users WHERE guild_id = %s AND user_name = %s ORDER BY repeated DESC LIMIT 10;""", (guild_id, user_name)) #반드시 튜플로 해야함
     result = cursor.fetchall()
 
     return result

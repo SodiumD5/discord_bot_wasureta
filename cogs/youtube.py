@@ -8,7 +8,7 @@ import sys, os
 
 #최상위 디렉토리로 올라가기
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-import to_mysql
+import to_mysql, youtube_api
 
 #서버별 독립적인 데이터를 저장할 딕셔너리
 server_queues = {}
@@ -151,7 +151,7 @@ class youtube(commands.Cog):
 
     @commands.hybrid_command(name="play", description = "유튜브 링크를 가져오면 음악을 재생한다")
     @wasu_think
-    async def play(self, ctx, url: str):
+    async def play(self, ctx, search: str):
         """유튜브 링크를 가져오면 음악을 재생한다."""
         try:
             # 음성 채널에 연결
@@ -161,8 +161,15 @@ class youtube(commands.Cog):
 
                 if not voice_client: #봇이 연결이 안되어 있을 경우, 연결시키기
                     voice_client = await ctx.author.voice.channel.connect() 
+                
+                #url이면 그대로, url이 아니라 검색어이면, url을 가져온다. 
+                if search[:31] != "https://www.youtube.com/watch?v=":
+                    search = youtube_api.get_video_link(search)
+                    if search == "error message":
+                        await smart_send(ctx, "해당하는 노래를 찾지 못 했습니다.")
+                        return
 
-                await self.append_music(ctx, url, applicant, voice_client)
+                await self.append_music(ctx, search, applicant, voice_client)
                 
             else:
                 await smart_send(ctx, "먼저 음성 채널에 들어가 주세요")
@@ -212,23 +219,23 @@ class youtube(commands.Cog):
             voice_client.resume()
             await smart_send(ctx, "다시 시작하였습니다.")
 
-    @commands.hybrid_command(name = "search-server-top3", description = "해당 서버에서 가장 많이 재생된 음악 top3를 알려준다.")
+    @commands.hybrid_command(name = "search-server-top10", description = "해당 서버에서 가장 많이 재생된 음악을을 알려준다.")
     @wasu_think
     async def rank(self, ctx):
-        """해당 서버에서 가장 많이 재생된 음악 top3를 알려준다."""
+        """해당 서버에서 가장 많이 재생된 음악을을 알려준다."""
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id
-        top3_data = to_mysql.rank(guild_id)
+        top10_data = to_mysql.rank(guild_id)
 
         message_temp = ''
         j = 1
-        for i in top3_data:
+        for i in top10_data:
             message_temp += f'{j} 위 {i[2]} : {i[3]} 회 재생 됨 \n'
             j += 1
 
         await smart_send(ctx, message_temp)
 
-    @commands.hybrid_command(name = "search-user-top3", description = "해당 유저의 많이 들은 노래의 순위를 알려준다.")
+    @commands.hybrid_command(name = "search-user-top10", description = "해당 유저의 많이 들은 노래의 순위를 알려준다.")
     @wasu_think
     async def find_user(self, ctx, user_name : str = None):
         """해당 유저의 많이 들은 노래의 순위를 알려준다."""
@@ -236,22 +243,29 @@ class youtube(commands.Cog):
 
         if user_name == None:
             user_name = ctx.author.name
-        top3_data = to_mysql.find_user(guild_id, user_name)
+        top10_data = to_mysql.find_user(guild_id, user_name)
         
         message_temp = ''
         j = 1
-        for i in top3_data:
+        for i in top10_data:
             message_temp += f'{j} 위 {i[3]} : {i[4]} 회 재생 됨 \n'
             j += 1
-
+        
+        #없는 or 아직 아무것도 노래를 안 튼 경우
+        if message_temp == '':
+            await smart_send(ctx, "해당 서버에 없는 유저거나, 아직 아무노래도 틀지 않은 유저입니다.")
+            return
         await smart_send(ctx, message_temp)
 
-    @commands.hybrid_command(name = "how-many-played", description = "노래 제목(유튜브 제목이랑 완전히 같게)을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다.")
+    @commands.hybrid_command(name = "how-many-played", description = "노래 제목을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다.")
     @wasu_think
     async def how_many_played(self, ctx, title:str):
-        """노래 제목(유튜브 제목이랑 완전히 같게)을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다."""        
+        """노래 제목을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다."""        
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id 
+
+        #대충 검색해도 그거와 관련된 것으로 대체해줌
+        title = youtube_api.get_video_title(title) 
         played_number_data = to_mysql.find_music(guild_id, title) 
 
         if played_number_data != ():
