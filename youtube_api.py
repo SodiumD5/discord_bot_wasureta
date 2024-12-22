@@ -29,10 +29,10 @@ def get_video_link(search):
 
 def get_video_title(search):
     search_response = base_setting(search)
+    items = search_response.get("items", [])
+    title = items[0].get('snippet', {}).get('title', '제목 없음')
 
-    for item in search_response.get("items", []):
-        if item["id"]["kind"] == "youtube#video":  # 동영상 결과 확인
-            video_title = item["title"]      # 동영상 ID 추출
-            return video_title
-        else:
-            return "error message"
+    if title != None:
+        return title
+    else:
+        return "error message"

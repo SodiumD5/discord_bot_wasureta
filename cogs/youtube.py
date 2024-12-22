@@ -1,4 +1,5 @@
 from discord.ext import commands
+from discord.ui import Button, View
 from collections import deque
 import discord
 import asyncio
@@ -58,6 +59,9 @@ class youtube(commands.Cog):
             #sql 넣기
             print(guild_id, next_play[2], next_play[1])
             to_mysql.add_sql(guild_id, next_play[2], next_play[1])
+        else: #큐가 다 끝남 -> 리소스 줄이기 위해서 나가기
+            await ctx.guild.voice_client.disconnect()
+
 
     async def handle_after_callback(self, ctx, error):
         if error:
@@ -148,6 +152,23 @@ class youtube(commands.Cog):
         if not voice_client.is_playing():
             await self.play_next(ctx)
 
+    async def play_only(self, ctx, link):
+        try:
+            # 음성 채널에 연결
+            if ctx.author.voice: #사용자가 음성채널에 들어가 있는지. 들어가 있으면 True
+                voice_client = ctx.guild.voice_client
+                applicant = ctx.author.name #신청자 정보
+
+                if not voice_client: #봇이 연결이 안되어 있을 경우, 연결시키기
+                    voice_client = await ctx.author.voice.channel.connect()
+                await self.append_music(ctx, link, applicant, voice_client)
+                
+            else:
+                await smart_send(ctx, "먼저 음성 채널에 들어가 주세요")
+
+        except Exception as err:
+            print(err)
+            await smart_send(ctx, "오류가 발생하여 음악을 재생할 수 없습니다.")
 
     @commands.hybrid_command(name="play", description = "유튜브 링크를 가져오면 음악을 재생한다")
     @wasu_think
@@ -219,6 +240,29 @@ class youtube(commands.Cog):
             voice_client.resume()
             await smart_send(ctx, "다시 시작하였습니다.")
 
+    async def top10(self, ctx, top10_data, title, message_temp, title_data_position):
+        #20초 제한시간
+        view = View(timeout = 20) 
+
+        for i in range(len(top10_data)):
+            button = Button(label = f'{i+1}번 재생', style = discord.ButtonStyle.green)
+
+            async def button_callback(interaction, button_index = i+1):
+                await interaction.response.send_message(f'{button_index}번 노래가 추가 되었습니다.')
+                link = youtube_api.get_video_link(top10_data[button_index-1][title_data_position])
+                await self.play_only(ctx, link)
+
+            async def time_out():
+                for item in view.children:
+                    item.disabled = True
+                await message.edit(view = view)
+            
+            view.on_timeout = time_out    
+            button.callback = button_callback
+            view.add_item(button)
+
+        message = await ctx.send(embed = discord.Embed(title = title, description = message_temp), view = view)
+
     @commands.hybrid_command(name = "search-server-top10", description = "해당 서버에서 가장 많이 재생된 음악을을 알려준다.")
     @wasu_think
     async def rank(self, ctx):
@@ -230,10 +274,10 @@ class youtube(commands.Cog):
         message_temp = ''
         j = 1
         for i in top10_data:
-            message_temp += f'{j} 위 {i[2]} : {i[3]} 회 재생 됨 \n'
+            message_temp += f'{j} 위 {i[2]} : ```diff\n+{i[3]}회 재생 됨```\n'
             j += 1
 
-        await smart_send(ctx, message_temp)
+        await self.top10(ctx, top10_data, "서버 재생 순위", message_temp, 2)
 
     @commands.hybrid_command(name = "search-user-top10", description = "해당 유저의 많이 들은 노래의 순위를 알려준다.")
     @wasu_think
@@ -248,14 +292,15 @@ class youtube(commands.Cog):
         message_temp = ''
         j = 1
         for i in top10_data:
-            message_temp += f'{j} 위 {i[3]} : {i[4]} 회 재생 됨 \n'
+            message_temp += f'{j} 위 {i[3]} : ```diff\n+{i[4]}회 재생 됨```\n'
             j += 1
         
         #없는 or 아직 아무것도 노래를 안 튼 경우
         if message_temp == '':
             await smart_send(ctx, "해당 서버에 없는 유저거나, 아직 아무노래도 틀지 않은 유저입니다.")
             return
-        await smart_send(ctx, message_temp)
+        
+        await self.top10(ctx, top10_data, f'{user_name}님의 재생 순위', message_temp, 3)
 
     @commands.hybrid_command(name = "how-many-played", description = "노래 제목을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다.")
     @wasu_think
@@ -265,11 +310,27 @@ class youtube(commands.Cog):
         guild_id = ctx.guild.id 
 
         #대충 검색해도 그거와 관련된 것으로 대체해줌
-        title = youtube_api.get_video_title(title) 
-        played_number_data = to_mysql.find_music(guild_id, title) 
+        real_title = youtube_api.get_video_title(title) 
+        played_number_data = to_mysql.find_music(guild_id, real_title) 
 
         if played_number_data != ():
-            await smart_send(ctx, f'{played_number_data[0][3]} 회 재생 됨')
+            view = View(timeout = 20)
+
+            button = Button(label = '재생', style = discord.ButtonStyle.green) 
+            async def button_callback(interaction):
+                await interaction.response.send_message('노래가 추가 되었습니다')
+                link = youtube_api.get_video_link(real_title)
+                await self.play_only(ctx, link)
+
+            async def time_out():
+                for item in view.children:
+                    item.disabled = True
+                await message.edit(view = view)
+
+            view.on_timeout = time_out    
+            button.callback = button_callback
+            view.add_item(button)
+            message = await ctx.send(embed = discord.Embed(title = f'{real_title} 재생 횟수', description = f'```diff\n+{played_number_data[0][3]}회 재생됨```'), view = view)
         else:
             await smart_send(ctx, "재생되지 않은 음악입니다.")
 
@@ -286,5 +347,11 @@ class youtube(commands.Cog):
             await smart_send(ctx, "재생 중 아님")
             print(deq)
 
+    @commands.hybrid_command(name = "playlist", description = "해당 유저가 많이 틀었던 노래 플레이리스트를 재생해준다.")
+    @wasu_think
+    async def playlist(self, ctx, user_name : str):
+        pass
+
+    
 async def setup(bot):
     await bot.add_cog(youtube(bot))
