@@ -114,5 +114,32 @@ def random_user_playlist(guild_id, user_name, start_num, end_num):
     
     sample = random.sample(result, min(10, len(result)))
     return sample
+
+
+def save_title_data(title, link):
+    connect, cursor = run_sql()
+    # 없으면 저장. 있는지 확인
+    cursor.execute("""SELECT * FROM title WHERE title = %s""", (title))
+    is_data_in = cursor.fetchall()
+
+    if is_data_in == ():
+        cursor.execute("""INSERT INTO title (title, link) VALUES(%s, %s);""", (title, link))
+    disconnect_sql(connect, cursor)
+
+def find_title_data(url):
+    connect, cursor = run_sql()
+    cursor.execute("""SELECT * FROM title WHERE url = %s""", (url))
+    result = cursor.fetchall()
+    disconnect_sql(connect, cursor)
+
+    return result
+
+def find_url_data(title):
+    connect, cursor = run_sql()
+    cursor.execute("""SELECT * FROM title WHERE title = %s""", (title))
+    result = cursor.fetchall()
+    disconnect_sql(connect, cursor)
+
+    return result
     
     

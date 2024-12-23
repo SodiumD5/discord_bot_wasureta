@@ -10,7 +10,7 @@ import sys, os
 
 #최상위 디렉토리로 올라가기
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-import to_mysql, youtube_api
+import to_mysql, crolling
 
 #서버별 독립적인 데이터를 저장할 딕셔너리
 server_queues = {}
@@ -107,7 +107,7 @@ class youtube(commands.Cog):
         for que_data in que_datas:
             deq.append(que_data)
 
-    async def append_music(self, ctx, url, applicant, voice_client, *is_wasu):
+    async def append_music(self, ctx, title, url, applicant, voice_client, *is_wasu):
         guild_id = ctx.guild.id 
         deq= get_server_data(guild_id)
 
@@ -133,9 +133,8 @@ class youtube(commands.Cog):
         #플레이리스트가 아닐 때
         else:
             is_playlist = 1 #플리가 아닐 경우 1곡임. 
-            song = data['url']
-            title = data['title']
-            music_info = discord.FFmpegPCMAudio(song, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
+            new_url = data['url']
+            music_info = discord.FFmpegPCMAudio(new_url, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
             if not is_wasu:
                 deq.append([music_info, title, applicant]) #곡의 정보, 제목, 그 곡의 신청자이름
                 await self.call_executer(ctx, voice_client, is_playlist, title)
@@ -167,7 +166,7 @@ class youtube(commands.Cog):
         if not voice_client.is_playing():
             await self.play_next(ctx)
 
-    async def play_only(self, ctx, link, *is_wasu):
+    async def play_only(self, ctx, title, link, *is_wasu):
         try:
             # 음성 채널에 연결
             if ctx.author.voice: #사용자가 음성채널에 들어가 있는지. 들어가 있으면 True
@@ -177,9 +176,9 @@ class youtube(commands.Cog):
                 if not voice_client: #봇이 연결이 안되어 있을 경우, 연결시키기
                     voice_client = await ctx.author.voice.channel.connect()
                 if is_wasu:
-                    await self.append_music(ctx, link, applicant, voice_client, True)
+                    await self.append_music(ctx, title, link, applicant, voice_client, True)
                 else:
-                    await self.append_music(ctx, link, applicant, voice_client)
+                    await self.append_music(ctx, title, link, applicant, voice_client)
                 
             else:
                 await smart_send(ctx, "먼저 음성 채널에 들어가 주세요")
@@ -188,7 +187,7 @@ class youtube(commands.Cog):
             print(err)
             await smart_send(ctx, "오류가 발생하여 음악을 재생할 수 없습니다.")
 
-    @commands.hybrid_command(name="play", description = "유튜브 링크를 가져오면 음악을 재생한다")
+    @commands.hybrid_command(name="play", description = "유튜브 링크를 가져오면 음악을 재생한다/검색어를 입력하면 5개 중에 선택이 가능하다.")
     @wasu_think
     async def play(self, ctx, search: str):
         """유튜브 링크를 가져오면 음악을 재생한다."""
@@ -201,15 +200,50 @@ class youtube(commands.Cog):
                 if not voice_client: #봇이 연결이 안되어 있을 경우, 연결시키기
                     voice_client = await ctx.author.voice.channel.connect() 
                 
-                #url이면 그대로, url이 아니라 검색어이면, url을 가져온다. 
+                #url이면 그대로, url이 아니라 검색어이면, url을 가져온다. -> 5개를 가져와서 선택할 수 있도록
                 if search[:31] != "https://www.youtube.com/watch?v=":
-                    search = youtube_api.get_video_link(search)
-                    if search == "error message":
+                    view = View(timeout = 20)
+
+                    message_temp = ''
+                    search_output = crolling.search_link(search, 5)
+
+                    for i in range(len(search_output)):
+                        message_temp += f'{i+1}번 검색결과 : {search_output[i][0]} \n\n'
+
+                    for i in range(len(search_output)):
+                        button = Button(label = f'{i+1}번 재생', style = discord.ButtonStyle.green)
+
+                        async def button_callback(interaction, button_index = i+1):
+                            await interaction.response.send_message(f'{button_index}번 노래가 추가 되었습니다.')
+                            link = search_output[button_index-1][1]
+                            title = search_output[button_index-1][0]
+                            await self.append_music(ctx, title, link, applicant, voice_client)
+                            
+                            to_mysql.save_title_data(title, link)
+                            #한 번만 클릭되게
+                            for item in view.children:
+                                item.disabled = True
+                            await message.edit(view = view)
+
+                        button.callback = button_callback
+                        view.add_item(button)
+
+                    async def time_out():
+                        for item in view.children:
+                            item.disabled = True
+                        await message.edit(view = view)
+
+                    view.on_timeout = time_out
+                    message = await ctx.send(embed = discord.Embed(title = f"{search} 검색결과", description = message_temp), view = view)
+
+                    if search_output == "error message":
                         await smart_send(ctx, "해당하는 노래를 찾지 못 했습니다.")
                         return
+                    
+                else: #url을 입력 받았을 경우에 db에 저장
+                    title = crolling.search_title(search)
+                    to_mysql.save_title_data(title, search)
 
-                await self.append_music(ctx, search, applicant, voice_client)
-                
             else:
                 await smart_send(ctx, "먼저 음성 채널에 들어가 주세요")
 
@@ -268,8 +302,9 @@ class youtube(commands.Cog):
 
             async def button_callback(interaction, button_index = i+1):
                 await interaction.response.send_message(f'{button_index}번 노래가 추가 되었습니다.')
-                link = youtube_api.get_video_link(top10_data[button_index-1][title_data_position])
-                await self.play_only(ctx, link)
+                title = top10_data[button_index-1][title_data_position]
+                link = to_mysql.find_url_data(title) # -> 이건 db에서 가져오자
+                await self.play_only(ctx, title, link[2])
 
             button.callback = button_callback
             view.add_item(button)
@@ -282,16 +317,17 @@ class youtube(commands.Cog):
             playall = Button(label = "모두 재생", style = discord.ButtonStyle.primary)
 
             async def playall_callback(interaction):
-                voice_client = ctx.guild.voice_client
+                # voice_client = ctx.guild.voice_client
                 await interaction.response.send_message(f"{len(top10_data)}곡이 대기열 {len(deq)}번 부터 추가 되었습니다.")
-                link = youtube_api.get_video_link(top10_data[0][title_data_position])
+                title = top10_data[0][title_data_position]
+                link = to_mysql.find_url_data(title)[2] # -> 이거도 db에서 가져오는거로 (1곡만)
 
                 #첫 곡 던지고
-                await self.play_only(ctx, link)
+                await self.play_only(ctx, title, link)
                 
                 #나머지곡들 -> 남은 9곡은 이미 출력을 했기 때문에, 비동기로 하면 순서가 꼬이므로, 동기처리한다. 
                 for i in range(1, len(top10_data)):
-                    link = youtube_api.get_video_link(top10_data[i][title_data_position])
+                    link = to_mysql.find_url_data(top10_data[i][title_data_position]) # -> 이거도 db에서 가져오는거로 (1곡씩만)
                     
                     loop = asyncio.get_event_loop()
                     video_data = await loop.run_in_executor(None, self.sodiumd_extract_info, link)
@@ -362,7 +398,8 @@ class youtube(commands.Cog):
         guild_id = ctx.guild.id 
 
         #대충 검색해도 그거와 관련된 것으로 대체해줌
-        real_title = youtube_api.get_video_title(title) 
+        result = crolling.search_link(title, 1) # -> 1곡씩만 크롤링으로 가져오기
+        real_title = result[0][0]
         played_number_data = to_mysql.find_music(guild_id, real_title) 
 
         if played_number_data != ():
@@ -371,8 +408,8 @@ class youtube(commands.Cog):
             button = Button(label = '재생', style = discord.ButtonStyle.green) 
             async def button_callback(interaction):
                 await interaction.response.send_message('노래가 추가 되었습니다')
-                link = youtube_api.get_video_link(real_title)
-                await self.play_only(ctx, link)
+                link = result[1] # -> 위에서 가져온거 돌려쓰면 될 듯?
+                await self.play_only(ctx, real_title, link)
 
             async def time_out():
                 for item in view.children:
@@ -384,7 +421,8 @@ class youtube(commands.Cog):
             view.add_item(button)
             message = await ctx.send(embed = discord.Embed(title = f'{real_title} 재생 횟수', description = f'```diff\n+{played_number_data[0][3]}회 재생됨```'), view = view)
         else:
-            await smart_send(ctx, "재생되지 않은 음악입니다.")
+            view = View()
+            await ctx.send(embed = discord.Embed(title = f'{real_title} 재생 횟수', description = f'```diff\n-재생되지 않은 음악입니다.```'), view = view)
 
     @commands.hybrid_command(name = "leave", description = "wasureta를 내보낸다")
     @wasu_think
@@ -402,7 +440,7 @@ class youtube(commands.Cog):
     @wasu_think
     async def wasu(self, ctx):
         """wasureta를 바로 다음 곡으로 선정한다."""
-        await self.play_only(ctx, "https://www.youtube.com/watch?v=NaBF7qsPxWg", True)
+        await self.play_only(ctx, "wasureta","https://www.youtube.com/watch?v=NaBF7qsPxWg", True)
 
     @commands.hybrid_command(name = "now-playing", description = "현재 재생 중인 노래의 제목과 링크를 준다.")
     @wasu_think
@@ -411,8 +449,8 @@ class youtube(commands.Cog):
         voice_client = ctx.guild.voice_client
 
         if ctx.guild.voice_client and voice_client.is_playing():
-            now_link = youtube_api.get_video_link(now_play)
-            await smart_send(ctx, f'현재 곡 : {now_play} \n링크 : {now_link}')
+            now_link = to_mysql.find_url_data(now_play) #db에서 가져오면 됨
+            await smart_send(ctx, f'현재 곡 : {now_play} \n링크 : {now_link[0][2]}')
         else:
             await smart_send(ctx, "현재 재생 중이 아닙니다.")
 
