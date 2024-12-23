@@ -12,16 +12,14 @@ import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import to_mysql, crolling
 
-#서버별 독립적인 데이터를 저장할 딕셔너리
+#서버별 독립적인 데이터를 저장할 딕셔너리 (절대 전역 변수 안됨)
 server_queues = {}
-
-#현재 재생 중인 노래
-now_play = None
+server_nowplay = {}
+server_isrepeat = {}
 
 def get_server_data(guild_id):
     if guild_id not in server_queues:
         server_queues[guild_id] = deque()
-
     return server_queues[guild_id]
 
 #함수를 감싸줌.
@@ -51,19 +49,31 @@ class youtube(commands.Cog):
     #음악 채워주는 함수
     async def play_next(self, ctx):
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
-        global now_play
         guild_id = ctx.guild.id 
-        deq= get_server_data(guild_id)
+        deq = get_server_data(guild_id)
+
+        if guild_id not in server_isrepeat:
+            server_isrepeat[guild_id] = "반복 안 함"
+        if server_isrepeat[guild_id] == "이 곡 반복" or server_isrepeat[guild_id] == "전체 반복":
+            url = to_mysql.find_url_data(server_nowplay[guild_id][1])
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(None, self.sodiumd_extract_info, url[0][2])
+            new_url = data['url']
+            new_music_info = discord.FFmpegPCMAudio(new_url, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
+
+            if server_isrepeat[guild_id] == "이 곡 반복":
+                deq.appendleft([new_music_info, server_nowplay[guild_id][1], server_nowplay[guild_id][2]])
+            elif server_isrepeat[guild_id] == "전체 반복": 
+                deq.append([new_music_info, server_nowplay[guild_id][1], server_nowplay[guild_id][2]]) #deq꺼를 그대로 가져와서 0번이 변환된 url, 1번이 title, 2번이 신청자이름임 
 
         if len(deq) > 0:
-            now_play = deq[0][1]
+            server_nowplay[guild_id] = deq[0]
             next_play = deq.popleft()
             ctx.guild.voice_client.play(next_play[0], after= lambda e: asyncio.run_coroutine_threadsafe(
                 self.handle_after_callback(ctx, e), ctx.bot.loop
             ))
 
             #sql 넣기
-            print(guild_id, next_play[2], next_play[1])
             to_mysql.add_sql(guild_id, next_play[2], next_play[1])
         else: #큐가 다 끝남 -> 리소스 줄이기 위해서 나가기
             await ctx.guild.voice_client.disconnect()
@@ -198,10 +208,11 @@ class youtube(commands.Cog):
                 applicant = ctx.author.name #신청자 정보
 
                 if not voice_client: #봇이 연결이 안되어 있을 경우, 연결시키기
-                    voice_client = await ctx.author.voice.channel.connect() 
+                    voice_client = await ctx.author.voice.channel.connect()
+                    server_isrepeat[ctx.guild.id] = "반복 안 함"
                 
                 #url이면 그대로, url이 아니라 검색어이면, url을 가져온다. -> 5개를 가져와서 선택할 수 있도록
-                if search[:31] != "https://www.youtube.com/watch?v=":
+                if search[:24] != "https://www.youtube.com/":
                     view = View(timeout = 20)
 
                     message_temp = ''
@@ -257,7 +268,7 @@ class youtube(commands.Cog):
         """현재 대기열이 몇 개의 음악이 남았는지 알려준다."""
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id 
-        deq = get_server_data(guild_id)
+        deq= get_server_data(guild_id)
 
         if len(deq) == 0: #큐가 비었을 경우. 
             await smart_send(ctx, "음악큐가 비어있습니다.")
@@ -274,7 +285,7 @@ class youtube(commands.Cog):
         """현재 재생 중인 음악을 스킵한다."""
         voice_client = ctx.guild.voice_client
         if voice_client and voice_client.is_playing():
-            voice_client.stop()
+            voice_client.pause()
             await self.play_next(ctx)
             if voice_client and voice_client.is_playing():
                 await smart_send(ctx, "다음 노래가 재생됩니다.")
@@ -303,8 +314,8 @@ class youtube(commands.Cog):
             async def button_callback(interaction, button_index = i+1):
                 await interaction.response.send_message(f'{button_index}번 노래가 추가 되었습니다.')
                 title = top10_data[button_index-1][title_data_position]
-                link = to_mysql.find_url_data(title) # -> 이건 db에서 가져오자
-                await self.play_only(ctx, title, link[2])
+                link = to_mysql.find_url_data(title) # -> 이건 db에서 가져오자 1건만 가져옴. 
+                await self.play_only(ctx, title, link[0][2])
 
             button.callback = button_callback
             view.add_item(button)
@@ -320,7 +331,7 @@ class youtube(commands.Cog):
                 # voice_client = ctx.guild.voice_client
                 await interaction.response.send_message(f"{len(top10_data)}곡이 대기열 {len(deq)}번 부터 추가 되었습니다.")
                 title = top10_data[0][title_data_position]
-                link = to_mysql.find_url_data(title)[2] # -> 이거도 db에서 가져오는거로 (1곡만)
+                link = to_mysql.find_url_data(title)[0][2] # -> 이거도 db에서 가져오는거로 (1곡만)
 
                 #첫 곡 던지고
                 await self.play_only(ctx, title, link)
@@ -330,7 +341,7 @@ class youtube(commands.Cog):
                     link = to_mysql.find_url_data(top10_data[i][title_data_position]) # -> 이거도 db에서 가져오는거로 (1곡씩만)
                     
                     loop = asyncio.get_event_loop()
-                    video_data = await loop.run_in_executor(None, self.sodiumd_extract_info, link)
+                    video_data = await loop.run_in_executor(None, self.sodiumd_extract_info, link[0][2])
 
                     title = top10_data[i][title_data_position]
                     music_info = discord.FFmpegPCMAudio(video_data['url'], executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
@@ -447,14 +458,13 @@ class youtube(commands.Cog):
     async def wasu(self, ctx):
         """현재 재생 중인 노래의 제목과 링크를 준다."""
         voice_client = ctx.guild.voice_client
+        guild_id = ctx.guild.id
 
         if ctx.guild.voice_client and voice_client.is_playing():
-            now_link = to_mysql.find_url_data(now_play) #db에서 가져오면 됨
-            await smart_send(ctx, f'현재 곡 : {now_play} \n링크 : {now_link[0][2]}')
+            now_link = to_mysql.find_url_data(server_nowplay[guild_id][1]) #db에서 가져오면 됨
+            await smart_send(ctx, f'현재 곡 : {server_nowplay[guild_id][1]} \n링크 : {now_link[0][2]}')
         else:
             await smart_send(ctx, "현재 재생 중이 아닙니다.")
-
-
 
     @commands.hybrid_command(name = "playlist", description = "해당 유저가 많이 틀었던 노래 플레이리스트를 랜덤으로 뽑아준다.")
     @app_commands.describe(
@@ -463,7 +473,6 @@ class youtube(commands.Cog):
         end_num = "몇 위까지 검색할 지 입력(비워두면 50위까지 검색한다)"
     )
     @wasu_think
-
     async def playlist(self, ctx, user_name : str = None, start_num : int = None, end_num : int = None):
         """해당 유저가 많이 틀었던 노래 플레이리스트를 랜덤으로 뽑아준다."""
         #기본값 설정
@@ -506,6 +515,69 @@ class youtube(commands.Cog):
                 await smart_send(ctx, "없는 유저이거나, 해당하는 순위범위에 노래가 없습니다.")
             else:
                 await self.top10(ctx, result, f"{user_name}의 랜덤 노래", message_temp, 3, user_name)        
+
+    @commands.hybrid_command(name = "repeat", description = "한 곡 반복이나, 현재플리를 반복 할 수 있습니다.")
+    @wasu_think
+    async def repeat(self, ctx):
+        """한 곡 반복이나, 현재플리를 반복 할 수 있습니다."""
+        guild_id = ctx.guild.id
+        voice_client = ctx.guild.voice_client
+        if not (ctx.author.voice and ctx.guild.voice_client and voice_client.is_playing()):
+            await smart_send(ctx, "먼저 재생을 시작하세요.")
+
+        view = View(timeout=20)
+        not_song_repeat = Button(label = "반복 안 함", style = discord.ButtonStyle.red)
+        one_song_repeat = Button(label = "이 곡 반복", style = discord.ButtonStyle.green)
+        all_song_repeat = Button(label = "전체 반복", style = discord.ButtonStyle.primary)
+
+        async def not_song_callback(interaction):
+            server_isrepeat[guild_id] = "반복 안 함"
+            await interaction.response.edit_message(
+                embed = discord.Embed(title = f'{ctx.guild.name} 서버 반복 설정', description = f'현재 상태 : {server_isrepeat[guild_id]}'), view = view)
+            
+            for item in view.children:
+                item.disabled = True
+            await message.edit(view = view)
+            
+        async def one_song_callback(interaction):
+            server_isrepeat[guild_id] = "이 곡 반복"
+            await interaction.response.edit_message(
+                embed = discord.Embed(title = f'{ctx.guild.name} 서버 반복 설정', description = f'현재 상태 : {server_isrepeat[guild_id]}'), view = view)
+            
+            for item in view.children:
+                item.disabled = True
+            await message.edit(view = view)
+
+        async def all_song_callback(interaction):
+            server_isrepeat[guild_id] = "전체 반복"
+            await interaction.response.edit_message(
+                embed = discord.Embed(title = f'{ctx.guild.name} 서버 반복 설정', description = f'현재 상태 : {server_isrepeat[guild_id]}'), view = view)
+            
+            for item in view.children:
+                item.disabled = True
+            await message.edit(view = view)
+        
+        not_song_repeat.callback = not_song_callback
+        one_song_repeat.callback = one_song_callback
+        all_song_repeat.callback = all_song_callback
+
+        async def time_out():
+            for item in view.children:
+                item.disabled = True
+            await message.edit(view = view)
+        view.on_timeout = time_out
+        
+        if server_isrepeat[guild_id] == "반복 안 함":
+            view.add_item(one_song_repeat)
+            view.add_item(all_song_repeat)
+        elif server_isrepeat[guild_id] == "이 곡 반복":
+            view.add_item(not_song_repeat)
+            view.add_item(all_song_repeat)
+        else: #전체 반복 
+            view.add_item(not_song_repeat)
+            view.add_item(one_song_repeat)
+        
+        message = await ctx.send(embed = discord.Embed(title = f'{ctx.guild.name} 서버 반복 설정', description = f'현재 상태 : {server_isrepeat[guild_id]}'), view = view)
 
 async def setup(bot):
     await bot.add_cog(youtube(bot))
