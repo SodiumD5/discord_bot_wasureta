@@ -103,6 +103,10 @@ class youtube(commands.Cog):
 
         song = video_data['url']
         title = video_data['title']
+
+        #db에 추가
+        to_mysql.save_title_data(title, video_url)
+
         music_info = discord.FFmpegPCMAudio(song, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
         return ([music_info, title, applicant])
 
@@ -117,7 +121,7 @@ class youtube(commands.Cog):
         for que_data in que_datas:
             deq.append(que_data)
 
-    async def append_music(self, ctx, title, url, applicant, voice_client, *is_wasu):
+    async def append_music(self, ctx, url, applicant, voice_client, *title): #url을 입력받은 경우에는 플리일 수도 있어서 title을 넘기지 않음 
         guild_id = ctx.guild.id 
         deq= get_server_data(guild_id)
 
@@ -135,17 +139,17 @@ class youtube(commands.Cog):
             #첫 곡 던져두기
             first_song_info = await self.one_song_player(first_song, applicant)
             deq.append(first_song_info)
-            await self.call_executer(ctx, voice_client, is_playlist) 
+            await self.call_executer(ctx, voice_client, is_playlist, first_song_info[1]) 
 
             #나머지 곡 처리
-            asyncio.create_task(self.left_song_player(data_entries[1:50], applicant, deq)) #최대깊이 50곡으로 제한
+            asyncio.create_task(self.left_song_player(data_entries[1:min(len(data_entries), 50)], applicant, deq)) #최대깊이 50곡으로 제한
 
         #플레이리스트가 아닐 때
         else:
             is_playlist = 1 #플리가 아닐 경우 1곡임. 
             new_url = data['url']
             music_info = discord.FFmpegPCMAudio(new_url, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
-            if not is_wasu:
+            if title != "wasureta":
                 deq.append([music_info, title, applicant]) #곡의 정보, 제목, 그 곡의 신청자이름
                 await self.call_executer(ctx, voice_client, is_playlist, title)
             else:
@@ -153,7 +157,7 @@ class youtube(commands.Cog):
                 await self.call_executer(ctx, voice_client, is_playlist, "Wasureta 원곡")
 
 
-    async def call_executer(self, ctx, voice_client, is_playlist, *args):
+    async def call_executer(self, ctx, voice_client, is_playlist, *args): #args = title 
         guild_id = ctx.guild.id 
         deq = get_server_data(guild_id)
         
@@ -176,7 +180,7 @@ class youtube(commands.Cog):
         if not voice_client.is_playing():
             await self.play_next(ctx)
 
-    async def play_only(self, ctx, title, link, *is_wasu):
+    async def play_only(self, ctx, title, link):
         try:
             # 음성 채널에 연결
             if ctx.author.voice: #사용자가 음성채널에 들어가 있는지. 들어가 있으면 True
@@ -185,10 +189,7 @@ class youtube(commands.Cog):
 
                 if not voice_client: #봇이 연결이 안되어 있을 경우, 연결시키기
                     voice_client = await ctx.author.voice.channel.connect()
-                if is_wasu:
-                    await self.append_music(ctx, title, link, applicant, voice_client, True)
-                else:
-                    await self.append_music(ctx, title, link, applicant, voice_client)
+                await self.append_music(ctx, link, applicant, voice_client, title)
                 
             else:
                 await smart_send(ctx, "먼저 음성 채널에 들어가 주세요")
@@ -228,7 +229,7 @@ class youtube(commands.Cog):
                             await interaction.response.send_message(f'{button_index}번 노래가 추가 되었습니다.')
                             link = search_output[button_index-1][1]
                             title = search_output[button_index-1][0]
-                            await self.append_music(ctx, title, link, applicant, voice_client)
+                            await self.append_music(ctx, link, applicant, voice_client, title)
                             
                             to_mysql.save_title_data(title, link)
                             #한 번만 클릭되게
@@ -252,8 +253,7 @@ class youtube(commands.Cog):
                         return
                     
                 else: #url을 입력 받았을 경우에 db에 저장
-                    title = crolling.search_title(search)
-                    to_mysql.save_title_data(title, search)
+                    await self.append_music(ctx, search, applicant, voice_client)
 
             else:
                 await smart_send(ctx, "먼저 음성 채널에 들어가 주세요")
@@ -451,11 +451,11 @@ class youtube(commands.Cog):
     @wasu_think
     async def wasu(self, ctx):
         """wasureta를 바로 다음 곡으로 선정한다."""
-        await self.play_only(ctx, "wasureta","https://www.youtube.com/watch?v=NaBF7qsPxWg", True)
+        await self.play_only(ctx, "wasureta","https://www.youtube.com/watch?v=NaBF7qsPxWg")
 
     @commands.hybrid_command(name = "now-playing", description = "현재 재생 중인 노래의 제목과 링크를 준다.")
     @wasu_think
-    async def wasu(self, ctx):
+    async def now_playing(self, ctx):
         """현재 재생 중인 노래의 제목과 링크를 준다."""
         voice_client = ctx.guild.voice_client
         guild_id = ctx.guild.id
