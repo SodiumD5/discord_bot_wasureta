@@ -30,3 +30,6 @@ def search_title(url):
         # URL에서 메타데이터 추출
         info = ydl.extract_info(url, download=False)
         return info.get("title")
+
+def search_swms_videos():
+    pass

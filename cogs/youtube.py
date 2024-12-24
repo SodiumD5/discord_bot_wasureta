@@ -7,6 +7,7 @@ import asyncio
 import yt_dlp
 import functools
 import sys, os
+import random
 
 #최상위 디렉토리로 올라가기
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -37,6 +38,13 @@ async def smart_send(ctx, content):
         await ctx.interaction.followup.send(content)
     else:
         await ctx.send(content, reference = ctx.message)
+
+def get_message(page, deq, content_elements):
+    message_temp = ''
+    for i in range(content_elements):
+        message_temp += f'{10*page+i+1}번 (추가자 - {deq[10*page+i][2]}) : {deq[10*page+i][1]} \n\n'
+
+    return message_temp
 
 class youtube(commands.Cog):
     def __init__(self, bot):
@@ -108,7 +116,7 @@ class youtube(commands.Cog):
         to_mysql.save_title_data(title, video_url)
 
         music_info = discord.FFmpegPCMAudio(song, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
-        return ([music_info, title, applicant])
+        return [music_info, title, applicant]
 
     #남은 곡을 재생시키는 함수
     async def left_song_player(self, left_song_data, applicant, deq):
@@ -146,8 +154,15 @@ class youtube(commands.Cog):
 
         #플레이리스트가 아닐 때
         else:
+            #인자가 안 넘어 온 경우
+            if not title:
+                title = data['title']
+            else:
+                title = title[0]
+
             is_playlist = 1 #플리가 아닐 경우 1곡임. 
             new_url = data['url']
+            to_mysql.save_title_data(title, url)
             music_info = discord.FFmpegPCMAudio(new_url, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
             if title != "wasureta":
                 deq.append([music_info, title, applicant]) #곡의 정보, 제목, 그 곡의 신청자이름
@@ -189,6 +204,7 @@ class youtube(commands.Cog):
 
                 if not voice_client: #봇이 연결이 안되어 있을 경우, 연결시키기
                     voice_client = await ctx.author.voice.channel.connect()
+                    server_isrepeat[ctx.guild.id] = "반복 안 함"
                 await self.append_music(ctx, link, applicant, voice_client, title)
                 
             else:
@@ -197,6 +213,43 @@ class youtube(commands.Cog):
         except Exception as err:
             print(err)
             await smart_send(ctx, "오류가 발생하여 음악을 재생할 수 없습니다.")
+
+    async def show5_music(self, ctx, search_output, form_title, message_temp):
+        view = View(timeout= 20)
+
+        for i in range(len(search_output)):
+            button = Button(label = f'{i+1}번 재생', style = discord.ButtonStyle.green)
+            async def button_callback(interaction, button_index = i+1):
+                # 음성 채널에 연결
+                if ctx.author.voice: #사용자가 음성채널에 들어가 있는지. 들어가 있으면 True
+                    voice_client = ctx.guild.voice_client
+                    applicant = ctx.author.name #신청자 정보
+
+                    if not voice_client: #봇이 연결이 안되어 있을 경우, 연결시키기
+                        voice_client = await ctx.author.voice.channel.connect()
+                        server_isrepeat[ctx.guild.id] = "반복 안 함"
+
+                await interaction.response.send_message(f'{button_index}번 노래가 추가 되었습니다.')
+                link = search_output[button_index-1][1]
+                title = search_output[button_index-1][0]
+                await self.append_music(ctx, link, applicant, voice_client, title)
+                
+                to_mysql.save_title_data(title, link)
+                #한 번만 클릭되게
+                for item in view.children:
+                    item.disabled = True
+                await message.edit(view = view)
+
+            button.callback = button_callback
+            view.add_item(button)
+
+        async def time_out():
+            for item in view.children:
+                item.disabled = True
+            await message.edit(view = view)
+
+        view.on_timeout = time_out
+        message = await ctx.send(embed = discord.Embed(title = form_title, description = message_temp), view = view)
 
     @commands.hybrid_command(name="play", description = "유튜브 링크를 가져오면 음악을 재생한다/검색어를 입력하면 5개 중에 선택이 가능하다.")
     @wasu_think
@@ -213,40 +266,15 @@ class youtube(commands.Cog):
                     server_isrepeat[ctx.guild.id] = "반복 안 함"
                 
                 #url이면 그대로, url이 아니라 검색어이면, url을 가져온다. -> 5개를 가져와서 선택할 수 있도록
-                if search[:24] != "https://www.youtube.com/":
-                    view = View(timeout = 20)
-
+                if "https://www.youtube.com/" not in search and "https://youtu.be/" not in search:
                     message_temp = ''
                     search_output = crolling.search_link(search, 5)
 
                     for i in range(len(search_output)):
                         message_temp += f'{i+1}번 검색결과 : {search_output[i][0]} \n\n'
 
-                    for i in range(len(search_output)):
-                        button = Button(label = f'{i+1}번 재생', style = discord.ButtonStyle.green)
-
-                        async def button_callback(interaction, button_index = i+1):
-                            await interaction.response.send_message(f'{button_index}번 노래가 추가 되었습니다.')
-                            link = search_output[button_index-1][1]
-                            title = search_output[button_index-1][0]
-                            await self.append_music(ctx, link, applicant, voice_client, title)
-                            
-                            to_mysql.save_title_data(title, link)
-                            #한 번만 클릭되게
-                            for item in view.children:
-                                item.disabled = True
-                            await message.edit(view = view)
-
-                        button.callback = button_callback
-                        view.add_item(button)
-
-                    async def time_out():
-                        for item in view.children:
-                            item.disabled = True
-                        await message.edit(view = view)
-
-                    view.on_timeout = time_out
-                    message = await ctx.send(embed = discord.Embed(title = f"{search} 검색결과", description = message_temp), view = view)
+                    #form 외주 
+                    await self.show5_music(ctx, search_output, f"{search} 검색결과", message_temp)
 
                     if search_output == "error message":
                         await smart_send(ctx, "해당하는 노래를 찾지 못 했습니다.")
@@ -262,22 +290,91 @@ class youtube(commands.Cog):
             print(err)
             await smart_send(ctx, "오류가 발생하여 음악을 재생할 수 없습니다.")
 
+    async def reload(self, ctx, deq, page):
+        view = View(timeout=60)
+        
+        content_elements = 10
+        if page == len(deq)//10: #마지막 페이지일 경우 
+            content_elements = len(deq)%10
+        
+        #제거 버튼
+        for i in range(content_elements):
+            remove_button = Button(label = f"{10*page+i+1}번 제거하기", style = discord.ButtonStyle.red)
+            async def remove_button_callback(interaction, button_index = i+1, page = page):
+                deq.remove(deq[10*page+button_index-1])
+                new_view, _, _ = await self.reload(ctx, deq, page)
+                await smart_send(ctx, f"{interaction.user.name}가 {10*page+button_index}번을 제거했습니다.")
+                
+                await interaction.response.edit_message(
+                    embed = discord.Embed(title = f"대기열 총{len(deq)}곡", description = get_message(page, deq, content_elements-1 if page == len(deq)//10 else content_elements)),
+                    view = new_view
+                )
+            remove_button.callback = remove_button_callback
+            view.add_item(remove_button)
+
+        #페이지 이동
+        before_button = Button(label="이전 페이지", style = discord.ButtonStyle.green)
+        after_button = Button(label="다음 페이지", style = discord.ButtonStyle.green)
+        async def before_button_callback(interaction, page = page):
+            new_view, _, _ = await self.reload(ctx, deq, page-1) 
+            
+            content_elements = 10
+            if page+1 == len(deq)//10: #마지막 페이지일 경우 
+                content_elements = len(deq)%10
+                     
+            await interaction.response.edit_message(
+                embed = discord.Embed(title = f"대기열 총{len(deq)}곡", description = get_message(page-1, deq, content_elements)), 
+                view = new_view
+            )
+
+        async def after_button_callback(interaction, page = page):
+            new_view, _, _ = await self.reload(ctx, deq, page+1)
+            
+            content_elements = 10
+            if page+1 == len(deq)//10: #마지막 페이지일 경우 
+                content_elements = len(deq)%10
+                
+            await interaction.response.edit_message(
+                embed = discord.Embed(title = f"대기열 총{len(deq)}곡", description = get_message(page+1, deq, content_elements)), 
+                view = new_view
+            )
+
+        before_button.callback = before_button_callback
+        after_button.callback = after_button_callback
+
+        if page > 0:
+            view.add_item(before_button)
+        if page < len(deq)//10:
+            view.add_item(after_button)
+
+        async def time_out(interaction):
+            for item in view.children:
+                item.disabled = True
+            new_view, _, _ = await self.reload(ctx, deq, page)
+            await interaction.response.edit_message(
+                embed = discord.Embed(title = f"대기열 총{len(deq)}곡", description = get_message(page, deq, content_elements)), 
+                view = new_view
+            )
+        view.on_timeout = time_out
+        
+        return view, content_elements, page
+        
     @commands.hybrid_command(name = "que", description = "현재 대기열이 몇 개의 음악이 남았는지 알려준다")
     @wasu_think
     async def left_que(self, ctx):
         """현재 대기열이 몇 개의 음악이 남았는지 알려준다."""
-        #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id 
-        deq= get_server_data(guild_id)
+        deq = get_server_data(guild_id)
+        page = 0
 
         if len(deq) == 0: #큐가 비었을 경우. 
             await smart_send(ctx, "음악큐가 비어있습니다.")
             return
-        message_temp = f'대기열에 총 {len(deq)}개의 곡이 존재합니다. \n'
-        for i in range(min(20, len(deq))):
-            message_temp += f'대기열 {i+1}번 - 추가자({deq[i][2]}): {deq[i][1]} \n'
-
-        await smart_send(ctx, message_temp)
+            
+        view, content_elements, page = await self.reload(ctx, deq, page)
+        embed = discord.Embed(title=f"대기열 총{len(deq)}곡", description=get_message(page, deq, content_elements))
+        await ctx.send(embed = embed, view = view)
+        
 
     @commands.hybrid_command(name = "skip", description = "현재 재생 중인 음악을 스킵한다.")
     @wasu_think
@@ -444,14 +541,9 @@ class youtube(commands.Cog):
         if ctx.author.voice and ctx.guild.voice_client and voice_client.is_playing():
             await ctx.guild.voice_client.disconnect()
             await smart_send(ctx, "연결을 끊었습니다.")
+            server_queues[ctx.guild.id] = deque() #초기화 
         else:
             await smart_send(ctx, "이미 연결이 끊어져있습니다.")
-
-    @commands.hybrid_command(name = "wasu", description = "wasureta를 바로 다음 곡으로 선정한다.")
-    @wasu_think
-    async def wasu(self, ctx):
-        """wasureta를 바로 다음 곡으로 선정한다."""
-        await self.play_only(ctx, "wasureta","https://www.youtube.com/watch?v=NaBF7qsPxWg")
 
     @commands.hybrid_command(name = "now-playing", description = "현재 재생 중인 노래의 제목과 링크를 준다.")
     @wasu_think
@@ -460,8 +552,11 @@ class youtube(commands.Cog):
         voice_client = ctx.guild.voice_client
         guild_id = ctx.guild.id
 
+        
         if ctx.guild.voice_client and voice_client.is_playing():
+            print(server_nowplay[guild_id])
             now_link = to_mysql.find_url_data(server_nowplay[guild_id][1]) #db에서 가져오면 됨
+            print(now_link)
             await smart_send(ctx, f'현재 곡 : {server_nowplay[guild_id][1]} \n링크 : {now_link[0][2]}')
         else:
             await smart_send(ctx, "현재 재생 중이 아닙니다.")
@@ -579,5 +674,51 @@ class youtube(commands.Cog):
         
         message = await ctx.send(embed = discord.Embed(title = f'{ctx.guild.name} 서버 반복 설정', description = f'현재 상태 : {server_isrepeat[guild_id]}'), view = view)
 
+    @commands.hybrid_command(name = "refresh-que", description = "que의 모든 노래를 삭제합니다.")
+    @wasu_think
+    async def refresh_que(self, ctx):
+        voice_client = ctx.guild.voice_client
+
+        if ctx.author.voice and ctx.guild.voice_client and voice_client.is_playing():
+            await smart_send(ctx, "모든 노래를 삭제하였습니다.")
+            server_queues[ctx.guild.id] = deque() #초기화 
+        else:
+            await smart_send(ctx, "먼저 음성 채널에 들어가 주세요")
+    
+    '''
+    여기서부턴 일종의 이스터에그 
+    신원미상의 플리
+    channel id를 yt-dlp --print "channel_id" "https://www.youtube.com/@SinWonMiSang" 로 긁어와서 앞에 UC를 UU로 바꾸고
+    https://www.youtube.com/playlist?list= 여기 뒤에 그걸 복붙하면 플리가 만들어진다. -> https://www.youtube.com/playlist?list=UUhoPhrRvzjAz_qagqCJAAJA
+    '''
+
+    @commands.hybrid_command(name = "wasu", description = "wasureta를 바로 다음 곡으로 선정한다.")
+    @wasu_think
+    async def wasu(self, ctx):
+        """wasureta를 바로 다음 곡으로 선정한다."""
+        await self.play_only(ctx, "wasureta","https://www.youtube.com/watch?v=NaBF7qsPxWg")
+
+    @commands.hybrid_command(name = "gd", description = "미상이가 좋아하는 랜덤노래 무슨 노래 재생 스타트~!")
+    @wasu_think
+    async def gd(self, ctx):
+        """미상이가 좋아하는 랜덤노래 무슨 노래 재생 스타트~!"""
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, self.sodiumd_extract_info, "https://www.youtube.com/playlist?list=UUhoPhrRvzjAz_qagqCJAAJA")
+        data_entries = data['entries']
+
+        result = random.sample(data_entries, 5)
+        gd_data = []
+        message_temp = ''
+
+        for i in range(5):
+            song = result[i]['url']
+            title = result[i]['title']
+            gd_data.append([title, song])
+            message_temp += f'{i+1}번 노래 : {title}\n\n'
+        
+        await self.show5_music(ctx, gd_data, "미상이가 좋아하는 랜덤 노래", message_temp)
+
+
 async def setup(bot):
     await bot.add_cog(youtube(bot))
+
