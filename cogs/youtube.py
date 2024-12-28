@@ -9,6 +9,15 @@ import functools
 import sys, os
 import random
 
+#유저 인 척하기
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5729.197 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64; rv:113.0) Gecko/20100101 Firefox/113.0",
+    # ... 추가 가능
+]
+
 #최상위 디렉토리로 올라가기
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import to_mysql, crolling
@@ -51,11 +60,14 @@ class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    rand_user = random.choice(USER_AGENTS)
     yt_dl_opts = {'format': 'best', 
                   'extract_flat' : 'in_playlist', 
                   'ratelimit' : 0, 
                   'cookies' : cookies_path,
                   'outtmpl': '%(title)s.%(ext)s',       # 파일명 템플릿
+                  'user_agent' : rand_user,
+                  "sleep_interval" : 2,
                   'postprocessors': [
                 {
                     'key': 'FFmpegExtractAudio',  # 오디오 추출 후 MP3 변환
@@ -732,5 +744,6 @@ class youtube(commands.Cog):
 
 
 async def setup(bot):
+    
     await bot.add_cog(youtube(bot))
 

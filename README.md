@@ -14,4 +14,7 @@ play -> append_music -> one_song_player
 
 requirements
 pip install Flask discord python-dotenv yt-dlp pymysql PrettyTable asyncio
+pip install pyNaCl
 ffmpeg를 다운 받아야한다. 
+sudo apt install ffmpeg -y
+env 파일 생성 : nano .env
