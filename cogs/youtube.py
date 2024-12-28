@@ -51,7 +51,18 @@ class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    yt_dl_opts = {'format': 'best', 'extract_flat' : 'in_playlist', 'ratelimit' : 0, 'cookies' : cookies_path}
+    yt_dl_opts = {'format': 'best', 
+                  'extract_flat' : 'in_playlist', 
+                  'ratelimit' : 0, 
+                  'cookies' : cookies_path,
+                  'outtmpl': '%(title)s.%(ext)s',       # 파일명 템플릿
+                  'postprocessors': [
+                {
+                    'key': 'FFmpegExtractAudio',  # 오디오 추출 후 MP3 변환
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192'
+                }
+            ],}
     ytdl = yt_dlp.YoutubeDL(yt_dl_opts)
     ffmpeg_options = {'options' : '-vn', 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'}
 
