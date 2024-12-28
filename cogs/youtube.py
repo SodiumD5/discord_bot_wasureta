@@ -62,10 +62,10 @@ class youtube(commands.Cog):
 
     rand_user = random.choice(USER_AGENTS)
     yt_dl_opts = {'format': 'best', 
-                  'extract_flat' : 'in_playlist', 
                   'ratelimit' : 0, 
                   'cookies' : cookies_path,
                   'outtmpl': '%(title)s.%(ext)s',       # 파일명 템플릿
+                  'user_agent' : rand_user,
                   'postprocessors': [
                 {
                     'key': 'FFmpegExtractAudio',  # 오디오 추출 후 MP3 변환
