@@ -10,3 +10,8 @@ since 2024.11.01
 play -> append_music -> call_executer -> play_next
 play -> append_music -> one_song_player 
                      -> left_song_player -> one_song_player
+
+
+requirements
+pip install Flask discord python-dotenv yt-dlp pymysql PrettyTable asyncio
+ffmpeg를 다운 받아야한다. 

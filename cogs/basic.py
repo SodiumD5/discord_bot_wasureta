@@ -1,4 +1,3 @@
-import time
 from discord.ext import commands
 
 class basic(commands.Cog):

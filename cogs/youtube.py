@@ -67,7 +67,7 @@ class youtube(commands.Cog):
             loop = asyncio.get_event_loop()
             data = await loop.run_in_executor(None, self.sodiumd_extract_info, url[0][2])
             new_url = data['url']
-            new_music_info = discord.FFmpegPCMAudio(new_url, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
+            new_music_info = discord.FFmpegPCMAudio(new_url, executable="ffmpeg", **self.ffmpeg_options)
 
             if server_isrepeat[guild_id] == "이 곡 반복":
                 deq.appendleft([new_music_info, server_nowplay[guild_id][1], server_nowplay[guild_id][2]])
