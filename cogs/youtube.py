@@ -12,6 +12,7 @@ import random
 #최상위 디렉토리로 올라가기
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import to_mysql, crolling
+cookies_path = "cookies.txt"
 
 #서버별 독립적인 데이터를 저장할 딕셔너리 (절대 전역 변수 안됨)
 server_queues = {}
@@ -50,7 +51,7 @@ class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    yt_dl_opts = {'format': 'best', 'extract_flat' : 'in_playlist', 'ratelimit' : 0}
+    yt_dl_opts = {'format': 'best', 'extract_flat' : 'in_playlist', 'ratelimit' : 0, 'cookies' : cookies_path}
     ytdl = yt_dlp.YoutubeDL(yt_dl_opts)
     ffmpeg_options = {'options' : '-vn', 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'}
 
