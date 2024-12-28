@@ -21,7 +21,7 @@ USER_AGENTS = [
 #최상위 디렉토리로 올라가기
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import to_mysql, crolling
-cookies_path = "cookies.txt"
+cookies_path = os.path.join(os.path.dirname(__file__), "cookies.txt")
 
 #서버별 독립적인 데이터를 저장할 딕셔너리 (절대 전역 변수 안됨)
 server_queues = {}
@@ -66,8 +66,6 @@ class youtube(commands.Cog):
                   'ratelimit' : 0, 
                   'cookies' : cookies_path,
                   'outtmpl': '%(title)s.%(ext)s',       # 파일명 템플릿
-                  'user_agent' : rand_user,
-                  "sleep_interval" : 2,
                   'postprocessors': [
                 {
                     'key': 'FFmpegExtractAudio',  # 오디오 추출 후 MP3 변환
