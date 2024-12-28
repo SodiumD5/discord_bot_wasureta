@@ -90,7 +90,6 @@ class youtube(commands.Cog):
             data = await loop.run_in_executor(None, self.sodiumd_extract_info, url[0][2])
             new_url = data['url']
             new_music_info = discord.FFmpegPCMAudio(new_url, executable="ffmpeg", **self.ffmpeg_options)
-
             if server_isrepeat[guild_id] == "이 곡 반복":
                 deq.appendleft([new_music_info, server_nowplay[guild_id][1], server_nowplay[guild_id][2]])
             elif server_isrepeat[guild_id] == "전체 반복": 
@@ -119,7 +118,7 @@ class youtube(commands.Cog):
     
     def sodiumd_extract_info(self, url):
         with yt_dlp.YoutubeDL(self.yt_dl_opts) as ydl:
-            data = ydl.extract_info(url, download=False)
+            data = ydl.extract_info(url, download=True)
         return data
 
     #첫 곡을 먼저 재생 던져 놓는 함수 (이면서, 한 곡 던져두면, 그 한곡만 처리시켜주는 함수)
