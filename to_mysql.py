@@ -12,7 +12,7 @@ def run_sql():
 
     #연결
     connect = pymysql.connect(
-        host = "127.0.0.1",
+        host = "13.209.3.207",
         user = ID,
         password = PW,
         port = 3306
