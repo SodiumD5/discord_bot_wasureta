@@ -85,10 +85,12 @@ since 2024.11.01
 
 ---
 
-## requirements
+### requirements
+
 pip install Flask discord python-dotenv yt-dlp pymysql PrettyTable asyncio
 pip install pyNaCl
+pip install cryptography (우분투에서)
 ffmpeg를 다운 받아야한다. 
 sudo apt install ffmpeg -y
 env 파일 생성 : nano .env
----
+자신의 ffmpeg 경로로 경로를 세팅해준다. 
