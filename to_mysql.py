@@ -29,13 +29,30 @@ def run_sql():
 #데이터 추가하기
 def add_data(cursor,guild_id, user_name, song_name):
     #guild table에 값 변경
-    cursor.execute("""INSERT INTO guild (guild_id, song_name, repeated, date) VALUES(%s, %s, 1, NOW())
-                   ON DUPLICATE KEY UPDATE repeated = repeated+1;""",
-                   (guild_id, song_name))
+    cursor.execute("""
+    UPDATE guild 
+    SET repeated = repeated + 1, update_date = NOW()
+    WHERE guild_id = %s AND song_name = %s;
+    """, (guild_id,  song_name))
+    cursor.execute(""" 
+    INSERT INTO guild (guild_id, song_name, repeated, update_date)
+    SELECT %s, %s, 1, NOW()
+    WHERE NOT EXISTS (
+    SELECT 1 FROM guild WHERE guild_id = %s AND song_name = %s);
+    """, (guild_id, song_name))
+
     #users table에 값 변경
-    cursor.execute("""INSERT INTO users (guild_id, user_name, song_name, repeated, date) VALUES(%s, %s, %s, 1, NOW())
-                   ON DUPLICATE KEY UPDATE repeated = repeated+1, date = NOW();""",
-                   (guild_id, user_name, song_name))
+    cursor.execute("""
+    UPDATE users
+    SET repeated = repeated + 1, update_date = NOW()
+    WHERE guild_id = %s AND user_name = %s AND song_name=%s;
+    """, (guild_id,  user_name, song_name))
+    cursor.execute(""" 
+    INSERT INTO guild (guild_id, user_name, song_name, repeated, update_date)
+    SELECT %s, %s, %s, 1, NOW()
+    WHERE NOT EXISTS (
+    SELECT 1 FROM guild WHERE guild_id = %s AND user_name = %s AND song_name = %s);
+    """, (guild_id, user_name, song_name))
     cursor.execute("SELECT * from users")
 
 #결과 찾기
