@@ -75,6 +75,24 @@ def select_music_data(cursor, guild_id, song_name):
 
     return result
 
+def search_guild_data(cursor, guild_id):
+    cursor.execute("""SELECT COUNT(id) FROM guild WHERE guild_id = %s;""", (guild_id))
+    total_number_songs = cursor.fetchall()
+    
+    cursor.execute("""SELECT SUM(repeated) FROM guild WHERE guild_id = %s;""", (guild_id))
+    total_number_plays = cursor.fetchall()
+    
+    return total_number_songs[0][0], total_number_plays[0][0]
+
+def search_user_data(cursor, guild_id, user_name):
+    cursor.execute("""SELECT COUNT(id) FROM users WHERE guild_id = %s AND user_name = %s;""", (guild_id, user_name))
+    total_user_songs = cursor.fetchall()
+    
+    cursor.execute("""SELECT SUM(repeated) FROM users WHERE guild_id = %s AND user_name = %s;""", (guild_id, user_name))
+    total_user_plays = cursor.fetchall()
+    
+    return total_user_songs[0][0], total_user_plays[0][0]
+
 #결과 보여주기
 def show_result(cursor):
     databases = cursor.fetchall()
@@ -102,14 +120,16 @@ def add_sql(guild_id, user_name, song_name):
 def rank(guild_id):
     connect, cursor = run_sql()
     result = select_guild_data(cursor, guild_id, 10, 0)
+    total_number_songs, total_number_plays = search_guild_data(cursor, guild_id)
     disconnect_sql(connect, cursor)
-    return result
+    return result, total_number_songs, total_number_plays
 
 def find_user(guild_id, user_name):
     connect, cursor = run_sql()
     result = select_users_data(cursor, guild_id, user_name, 10, 0)
+    total_user_songs, total_user_plays = search_user_data(cursor, guild_id, user_name)
     disconnect_sql(connect, cursor)
-    return result
+    return result, total_user_songs, total_user_plays
 
 def find_music(guild_id, song_name):
     connect, cursor = run_sql()

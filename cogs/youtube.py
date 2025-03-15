@@ -10,7 +10,6 @@ import sys, os
 import random
 import to_mysql, crolling
 
-#FFMPEG의 로컬 경로
 FFMPEG_ADDRESS = os.getenv("FFMPEG_ADDRESS")
 
 #서버별 독립적인 데이터를 저장할 딕셔너리 (절대 전역 변수 안됨)
@@ -50,16 +49,7 @@ class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    yt_dl_opts = {'format': 'best', 
-                  'ratelimit' : 0, 
-                  'outtmpl': '%(title)s.%(ext)s',       # 파일명 템플릿
-                  'postprocessors': [
-                {
-                    'key': 'FFmpegExtractAudio',  # 오디오 추출 후 MP3 변환
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192'
-                }
-            ],}
+    yt_dl_opts = {'format': 'best', 'extract_flat' : 'in_playlist', 'ratelimit' : 0}
     ytdl = yt_dlp.YoutubeDL(yt_dl_opts)
     ffmpeg_options = {'options' : '-vn', 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'}
 
@@ -76,7 +66,8 @@ class youtube(commands.Cog):
             loop = asyncio.get_event_loop()
             data = await loop.run_in_executor(None, self.sodiumd_extract_info, url[0][2])
             new_url = data['url']
-            new_music_info = discord.FFmpegPCMAudio(new_url, executable="ffmpeg", **self.ffmpeg_options)
+            new_music_info = discord.FFmpegPCMAudio(new_url, executable=FFMPEG_ADDRESS, **self.ffmpeg_options)
+
             if server_isrepeat[guild_id] == "이 곡 반복":
                 deq.appendleft([new_music_info, server_nowplay[guild_id][1], server_nowplay[guild_id][2]])
             elif server_isrepeat[guild_id] == "전체 반복": 
@@ -149,7 +140,7 @@ class youtube(commands.Cog):
         #'entries'가 딕셔너리에 있을 경우는 플리임.
         if 'entries' in data:
             data_entries = data['entries']
-            is_playlist = min(len(data_entries), 50) #총 몇개의 노래인지(최대 50개)
+            is_playlist = min(len(data_entries), 20) #총 몇개의 노래인지(최대 20개)
             first_song = data_entries[0]
             
             #첫 곡 던져두기
@@ -158,7 +149,7 @@ class youtube(commands.Cog):
             await self.call_executer(ctx, voice_client, is_playlist, first_song_info[1]) 
 
             #나머지 곡 처리
-            asyncio.create_task(self.left_song_player(data_entries[1:min(len(data_entries), 50)], applicant, deq)) #최대깊이 50곡으로 제한
+            asyncio.create_task(self.left_song_player(data_entries[1:min(len(data_entries), 20)], applicant, deq)) #최대깊이 20곡으로 제한
 
         #플레이리스트가 아닐 때
         else:
@@ -473,9 +464,9 @@ class youtube(commands.Cog):
         """해당 서버에서 가장 많이 재생된 음악을을 알려준다."""
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id
-        top10_data = to_mysql.rank(guild_id)
-
-        message_temp = ''
+        top10_data, total_number_songs, total_number_plays = to_mysql.rank(guild_id)
+        
+        message_temp = f'### 총 *{total_number_songs}*곡 *{total_number_plays}*회 재생 중\n'
         j = 1
         for i in top10_data:
             message_temp += f'{j}위 {i[2]} : ```diff\n+{i[3]}회 재생 됨```\n'
@@ -491,9 +482,9 @@ class youtube(commands.Cog):
 
         if user_name == None:
             user_name = ctx.author.name
-        top10_data = to_mysql.find_user(guild_id, user_name)
+        top10_data, total_user_songs, total_user_plays = to_mysql.find_user(guild_id, user_name)
         
-        message_temp = ''
+        message_temp = f'### 총 *{total_user_songs}*곡 *{total_user_plays}*회 재생 중\n'
         j = 1
         for i in top10_data:
             message_temp += f'{j}위 {i[3]} : ```diff\n+{i[4]}회 재생 됨```\n'
@@ -728,6 +719,4 @@ class youtube(commands.Cog):
 
 
 async def setup(bot):
-    
     await bot.add_cog(youtube(bot))
-
