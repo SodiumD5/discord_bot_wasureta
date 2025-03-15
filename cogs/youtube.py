@@ -118,7 +118,7 @@ class youtube(commands.Cog):
     
     def sodiumd_extract_info(self, url):
         with yt_dlp.YoutubeDL(self.yt_dl_opts) as ydl:
-            data = ydl.extract_info(url, download=True)
+            data = ydl.extract_info(url, download=False)
         return data
 
     #첫 곡을 먼저 재생 던져 놓는 함수 (이면서, 한 곡 던져두면, 그 한곡만 처리시켜주는 함수)
@@ -136,7 +136,7 @@ class youtube(commands.Cog):
         #db에 추가
         to_mysql.save_title_data(title, video_url)
 
-        music_info = discord.FFmpegPCMAudio(song, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
+        music_info = discord.FFmpegPCMAudio(song, executable="/usr/bin/ffmpeg", **self.ffmpeg_options)
         return [music_info, title, applicant]
 
     #남은 곡을 재생시키는 함수
@@ -184,7 +184,7 @@ class youtube(commands.Cog):
             is_playlist = 1 #플리가 아닐 경우 1곡임. 
             new_url = data['url']
             to_mysql.save_title_data(title, url)
-            music_info = discord.FFmpegPCMAudio(new_url, executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
+            music_info = discord.FFmpegPCMAudio(new_url, executable="/usr/bin/ffmpeg", **self.ffmpeg_options)
             if title != "wasureta":
                 deq.append([music_info, title, applicant]) #곡의 정보, 제목, 그 곡의 신청자이름
                 await self.call_executer(ctx, voice_client, is_playlist, title)
@@ -462,7 +462,7 @@ class youtube(commands.Cog):
                     video_data = await loop.run_in_executor(None, self.sodiumd_extract_info, link[0][2])
 
                     title = top10_data[i][title_data_position]
-                    music_info = discord.FFmpegPCMAudio(video_data['url'], executable="C:/ffmpeg/bin/ffmpeg.exe", **self.ffmpeg_options)
+                    music_info = discord.FFmpegPCMAudio(video_data['url'], executable="/usr/bin/ffmpeg", **self.ffmpeg_options)
                     deq.append([music_info, title, applicant])
 
                 for item in view.children:
