@@ -8,20 +8,10 @@ import yt_dlp
 import functools
 import sys, os
 import random
-
-#유저 인 척하기
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5729.197 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; WOW64; rv:113.0) Gecko/20100101 Firefox/113.0",
-    # ... 추가 가능
-]
-
-#최상위 디렉토리로 올라가기
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import to_mysql, crolling
-cookies_path = os.path.join(os.path.dirname(__file__), "cookies.txt")
+
+#FFMPEG의 로컬 경로
+FFMPEG_ADDRESS = os.getenv("FFMPEG_ADDRESS")
 
 #서버별 독립적인 데이터를 저장할 딕셔너리 (절대 전역 변수 안됨)
 server_queues = {}
@@ -60,12 +50,9 @@ class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    rand_user = random.choice(USER_AGENTS)
     yt_dl_opts = {'format': 'best', 
                   'ratelimit' : 0, 
-                  'cookies' : cookies_path,
                   'outtmpl': '%(title)s.%(ext)s',       # 파일명 템플릿
-                  'user_agent' : rand_user,
                   'postprocessors': [
                 {
                     'key': 'FFmpegExtractAudio',  # 오디오 추출 후 MP3 변환
@@ -136,7 +123,7 @@ class youtube(commands.Cog):
         #db에 추가
         to_mysql.save_title_data(title, video_url)
 
-        music_info = discord.FFmpegPCMAudio(song, executable="/usr/bin/ffmpeg", **self.ffmpeg_options)
+        music_info = discord.FFmpegPCMAudio(song, executable=FFMPEG_ADDRESS, **self.ffmpeg_options)
         return [music_info, title, applicant]
 
     #남은 곡을 재생시키는 함수
@@ -184,7 +171,7 @@ class youtube(commands.Cog):
             is_playlist = 1 #플리가 아닐 경우 1곡임. 
             new_url = data['url']
             to_mysql.save_title_data(title, url)
-            music_info = discord.FFmpegPCMAudio(new_url, executable="/usr/bin/ffmpeg", **self.ffmpeg_options)
+            music_info = discord.FFmpegPCMAudio(new_url, executable=FFMPEG_ADDRESS, **self.ffmpeg_options)
             if title != "wasureta":
                 deq.append([music_info, title, applicant]) #곡의 정보, 제목, 그 곡의 신청자이름
                 await self.call_executer(ctx, voice_client, is_playlist, title)
@@ -462,7 +449,7 @@ class youtube(commands.Cog):
                     video_data = await loop.run_in_executor(None, self.sodiumd_extract_info, link[0][2])
 
                     title = top10_data[i][title_data_position]
-                    music_info = discord.FFmpegPCMAudio(video_data['url'], executable="/usr/bin/ffmpeg", **self.ffmpeg_options)
+                    music_info = discord.FFmpegPCMAudio(video_data['url'], executable=FFMPEG_ADDRESS, **self.ffmpeg_options)
                     deq.append([music_info, title, applicant])
 
                 for item in view.children:
