@@ -6,9 +6,10 @@ import discord
 import asyncio
 import yt_dlp
 import functools
-import sys, os
+import os
 import random
-import to_mysql, crolling
+import to_supabase
+import crolling
 
 FFMPEG_ADDRESS = os.getenv("FFMPEG_ADDRESS")
 
@@ -49,7 +50,7 @@ class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    yt_dl_opts = {'format': 'best', 'extract_flat' : 'in_playlist', 'ratelimit' : 0}
+    yt_dl_opts = {'format': 'bestaudio/best', 'extract_flat' : 'in_playlist', 'ratelimit' : 0}
     ytdl = yt_dlp.YoutubeDL(yt_dl_opts)
     ffmpeg_options = {'options' : '-vn', 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'}
 
@@ -62,8 +63,10 @@ class youtube(commands.Cog):
         if guild_id not in server_isrepeat:
             server_isrepeat[guild_id] = "반복 안 함"
         if server_isrepeat[guild_id] == "이 곡 반복" or server_isrepeat[guild_id] == "전체 반복":
-            url = to_mysql.find_url_data(server_nowplay[guild_id][1])
+            url = to_supabase.find_url_data(server_nowplay[guild_id][1])
             loop = asyncio.get_event_loop()
+            
+            print(url)
             data = await loop.run_in_executor(None, self.sodiumd_extract_info, url[0][2])
             new_url = data['url']
             new_music_info = discord.FFmpegPCMAudio(new_url, executable=FFMPEG_ADDRESS, **self.ffmpeg_options)
@@ -81,7 +84,7 @@ class youtube(commands.Cog):
             ))
 
             #sql 넣기
-            to_mysql.add_sql(guild_id, next_play[2], next_play[1])
+            to_supabase.add_sql(guild_id, next_play[2], next_play[1])
         else: #큐가 다 끝남 -> 리소스 줄이기 위해서 나가기
             await ctx.guild.voice_client.disconnect()
             await smart_send(ctx, "연결을 끊었습니다.")
@@ -107,12 +110,12 @@ class youtube(commands.Cog):
 
         #새로 url을 만들어서 그 url을 다시 데이터로 변환시킴. 
         video_data = await loop.run_in_executor(None, self.sodiumd_extract_info, video_url)
-
+    
         song = video_data['url']
         title = video_data['title']
 
         #db에 추가
-        to_mysql.save_title_data(title, video_url)
+        to_supabase.save_title_data(title, video_url)
 
         music_info = discord.FFmpegPCMAudio(song, executable=FFMPEG_ADDRESS, **self.ffmpeg_options)
         return [music_info, title, applicant]
@@ -135,7 +138,7 @@ class youtube(commands.Cog):
         # YouTube에서 오디오 스트림 가져오기
         loop = asyncio.get_event_loop()
         data = await loop.run_in_executor(None, self.sodiumd_extract_info, url)
-        
+         
         #플레이리스트일 때
         #'entries'가 딕셔너리에 있을 경우는 플리임.
         if 'entries' in data:
@@ -161,7 +164,7 @@ class youtube(commands.Cog):
 
             is_playlist = 1 #플리가 아닐 경우 1곡임. 
             new_url = data['url']
-            to_mysql.save_title_data(title, url)
+            to_supabase.save_title_data(title, url)
             music_info = discord.FFmpegPCMAudio(new_url, executable=FFMPEG_ADDRESS, **self.ffmpeg_options)
             if title != "wasureta":
                 deq.append([music_info, title, applicant]) #곡의 정보, 제목, 그 곡의 신청자이름
@@ -228,12 +231,12 @@ class youtube(commands.Cog):
                         voice_client = await ctx.author.voice.channel.connect()
                         server_isrepeat[ctx.guild.id] = "반복 안 함"
 
-                await interaction.response.send_message(f'{button_index}번 노래가 추가 되었습니다.')
+                await interaction.response.send_message(f'{button_index}번 노래가 선택되었습니다.')
                 link = search_output[button_index-1][1]
                 title = search_output[button_index-1][0]
                 await self.append_music(ctx, link, applicant, voice_client, title)
                 
-                to_mysql.save_title_data(title, link)
+                to_supabase.save_title_data(title, link)
                 #한 번만 클릭되게
                 for item in view.children:
                     item.disabled = True
@@ -268,7 +271,6 @@ class youtube(commands.Cog):
                 if "https://www.youtube.com/" not in search and "https://youtu.be/" not in search:
                     message_temp = ''
                     search_output = crolling.search_link(search, 5)
-
                     for i in range(len(search_output)):
                         message_temp += f'{i+1}번 검색결과 : {search_output[i][0]} \n\n'
 
@@ -400,7 +402,7 @@ class youtube(commands.Cog):
             voice_client.resume()
             await smart_send(ctx, "다시 시작하였습니다.")
     
-    async def top10(self, ctx, top10_data, title, message_temp, title_data_position, *user_name): #랜덤플리를 쓸 때 필요한 args
+    async def top10(self, ctx, top10_data, title, message_temp, *user_name): #랜덤플리를 쓸 때 필요한 args
         #20초 제한시간
         view = View(timeout = 20) 
 
@@ -408,10 +410,10 @@ class youtube(commands.Cog):
             button = Button(label = f'{i+1}번 재생', style = discord.ButtonStyle.green)
 
             async def button_callback(interaction, button_index = i+1):
-                await interaction.response.send_message(f'{button_index}번 노래가 추가 되었습니다.')
-                title = top10_data[button_index-1][title_data_position]
-                link = to_mysql.find_url_data(title) # -> 이건 db에서 가져오자 1건만 가져옴. 
-                await self.play_only(ctx, title, link[0][2])
+                await interaction.response.send_message(f'{button_index}번 노래가 선택되었습니다.')
+                title = top10_data[button_index-1]["song_name"]
+                link = to_supabase.find_url_data(title) # -> 이건 db에서 가져오자 1건만 가져옴. 
+                await self.play_only(ctx, title, link[0]["link"])
 
             button.callback = button_callback
             view.add_item(button)
@@ -426,20 +428,20 @@ class youtube(commands.Cog):
             async def playall_callback(interaction):
                 # voice_client = ctx.guild.voice_client
                 await interaction.response.send_message(f"{len(top10_data)}곡이 대기열 {len(deq)}번 부터 추가 되었습니다.")
-                title = top10_data[0][title_data_position]
-                link = to_mysql.find_url_data(title)[0][2] # -> 이거도 db에서 가져오는거로 (1곡만)
+                title = top10_data[0]["song_name"]
+                link = to_supabase.find_url_data(title)[0]["link"] # -> 이거도 db에서 가져오는거로 (1곡만)
 
                 #첫 곡 던지고
                 await self.play_only(ctx, title, link)
                 
                 #나머지곡들 -> 남은 9곡은 이미 출력을 했기 때문에, 비동기로 하면 순서가 꼬이므로, 동기처리한다. 
                 for i in range(1, len(top10_data)):
-                    link = to_mysql.find_url_data(top10_data[i][title_data_position]) # -> 이거도 db에서 가져오는거로 (1곡씩만)
+                    link = to_supabase.find_url_data(top10_data[i]["song_name"]) # -> 이거도 db에서 가져오는거로 (1곡씩만)
                     
                     loop = asyncio.get_event_loop()
-                    video_data = await loop.run_in_executor(None, self.sodiumd_extract_info, link[0][2])
+                    video_data = await loop.run_in_executor(None, self.sodiumd_extract_info, link[0]["link"])
 
-                    title = top10_data[i][title_data_position]
+                    title = top10_data[i]["song_name"]
                     music_info = discord.FFmpegPCMAudio(video_data['url'], executable=FFMPEG_ADDRESS, **self.ffmpeg_options)
                     deq.append([music_info, title, applicant])
 
@@ -464,15 +466,14 @@ class youtube(commands.Cog):
         """해당 서버에서 가장 많이 재생된 음악을을 알려준다."""
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
         guild_id = ctx.guild.id
-        top10_data, total_number_songs, total_number_plays = to_mysql.rank(guild_id)
+        top10_data, info = to_supabase.server_song_ranking(guild_id)
         
-        message_temp = f'### 총 *{total_number_songs}*곡 *{total_number_plays}*회 재생 중\n'
-        j = 1
-        for i in top10_data:
-            message_temp += f'{j}위 {i[2]} : ```diff\n+{i[3]}회 재생 됨```\n'
-            j += 1
+        message_temp = f'### 총 *{info['total_number_songs']}*곡 *{info['total_number_plays']}*회 재생 중\n'
 
-        await self.top10(ctx, top10_data, f"{ctx.guild.name}서버 재생 순위", message_temp, 2)
+        for i, k in enumerate(top10_data):
+            message_temp += f'{i+1}위 {k['song_name']} : ```diff\n+{k['total_repeated']}회 재생 됨```\n'
+
+        await self.top10(ctx, top10_data, f"{ctx.guild.name}서버 재생 순위", message_temp)
 
     @commands.hybrid_command(name = "search-user-top10", description = "해당 유저의 많이 들은 노래의 순위를 알려준다.")
     @wasu_think
@@ -482,20 +483,19 @@ class youtube(commands.Cog):
 
         if user_name == None:
             user_name = ctx.author.name
-        top10_data, total_user_songs, total_user_plays = to_mysql.find_user(guild_id, user_name)
+        top10_data, info = to_supabase.user_song_ranking(guild_id, user_name)
         
-        message_temp = f'### 총 *{total_user_songs}*곡 *{total_user_plays}*회 재생 중\n'
-        j = 1
-        for i in top10_data:
-            message_temp += f'{j}위 {i[3]} : ```diff\n+{i[4]}회 재생 됨```\n'
-            j += 1
+        message_temp = f'### 총 *{info['total_number_songs']}*곡 *{info['total_number_plays']}*회 재생 중\n'
+    
+        for i, k in enumerate(top10_data):
+            message_temp += f'{i+1}위 {k['song_name']} : ```diff\n+{k['total_repeated']}회 재생 됨```\n'
         
         #없는 or 아직 아무것도 노래를 안 튼 경우
         if message_temp == '':
             await smart_send(ctx, "해당 서버에 없는 유저거나, 아직 아무노래도 틀지 않은 유저입니다.")
             return
         
-        await self.top10(ctx, top10_data, f'{user_name}님의 재생 순위', message_temp, 3)
+        await self.top10(ctx, top10_data, f'{user_name}님의 재생 순위', message_temp)
 
     @commands.hybrid_command(name = "how-many-played", description = "노래 제목을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다.")
     @wasu_think
@@ -507,7 +507,7 @@ class youtube(commands.Cog):
         #대충 검색해도 그거와 관련된 것으로 대체해줌
         result = crolling.search_link(title, 1) # -> 1곡씩만 크롤링으로 가져오기
         real_title = result[0][0]
-        played_number_data = to_mysql.find_music(guild_id, real_title) 
+        played_number_data = to_supabase.find_music(guild_id, real_title) 
 
         if played_number_data != ():
             view = View(timeout = 20)
@@ -515,7 +515,7 @@ class youtube(commands.Cog):
             button = Button(label = '재생', style = discord.ButtonStyle.green) 
             async def button_callback(interaction):
                 await interaction.response.send_message('노래가 추가 되었습니다')
-                link = result[1] # -> 위에서 가져온거 돌려쓰면 될 듯?
+                link = result[0][1] 
                 await self.play_only(ctx, real_title, link)
 
             async def time_out():
@@ -526,7 +526,7 @@ class youtube(commands.Cog):
             view.on_timeout = time_out    
             button.callback = button_callback
             view.add_item(button)
-            message = await ctx.send(embed = discord.Embed(title = f'{real_title} 재생 횟수', description = f'```diff\n+{played_number_data[0][3]}회 재생됨```'), view = view)
+            message = await ctx.send(embed = discord.Embed(title = f'{real_title} 재생 횟수', description = f'```diff\n+{played_number_data[0]["total_repeated"]}회 재생됨```'), view = view)
         else:
             view = View()
             await ctx.send(embed = discord.Embed(title = f'{real_title} 재생 횟수', description = f'```diff\n-재생되지 않은 음악입니다.```'), view = view)
@@ -553,10 +553,8 @@ class youtube(commands.Cog):
 
         
         if ctx.guild.voice_client and voice_client.is_playing():
-            print(server_nowplay[guild_id])
-            now_link = to_mysql.find_url_data(server_nowplay[guild_id][1]) #db에서 가져오면 됨
-            print(now_link)
-            await smart_send(ctx, f'현재 곡 : {server_nowplay[guild_id][1]} \n링크 : {now_link[0][2]}')
+            now_link = to_supabase.find_url_data(server_nowplay[guild_id][1]) #db에서 가져오면 됨
+            await smart_send(ctx, f'현재 곡 : {now_link[0]["title"]} \n링크 : {now_link[0]["link"]}')
         else:
             await smart_send(ctx, "현재 재생 중이 아닙니다.")
 
@@ -576,7 +574,7 @@ class youtube(commands.Cog):
         if end_num == None:
             end_num = start_num+50
 
-        result = to_mysql.random_user_playlist(guild_id, user_name, start_num, end_num)
+        result = to_supabase.random_user_playlist(guild_id, user_name, start_num, end_num)
         message_temp = ''
         j = 1
 
@@ -589,26 +587,23 @@ class youtube(commands.Cog):
             end_num = start_num
             start_num = temp
         
-        #비워진 경우 서버이다.
-        if user_name == None:
-            for i in result:
-                message_temp += f'{j}번 노래 : {i[2]} \n\n'
+        
+        for i in result:
+                message_temp += f'{j}번 노래 : {i["song_name"]} \n\n'
                 j += 1
-
+        
+        #비워진 경우 서버이다.   
+        if user_name == None:
             user_name = ctx.guild.name
             if message_temp == '':
                 await smart_send(ctx, "노래가 검색되지 않았습니다.")
             else:
-                await self.top10(ctx, result, f"{user_name}서버 랜덤 노래", message_temp, 2, user_name)
+                await self.top10(ctx, result, f"{user_name}서버 랜덤 노래", message_temp, user_name)
         else:
-            for i in result:
-                message_temp += f'{j}번 노래 : {i[3]} \n\n'
-                j += 1
-
             if message_temp == '':
                 await smart_send(ctx, "없는 유저이거나, 해당하는 순위범위에 노래가 없습니다.")
             else:
-                await self.top10(ctx, result, f"{user_name}의 랜덤 노래", message_temp, 3, user_name)        
+                await self.top10(ctx, result, f"{user_name}의 랜덤 노래", message_temp, user_name)        
 
     @commands.hybrid_command(name = "repeat", description = "한 곡 반복이나, 현재플리를 반복 할 수 있습니다.")
     @wasu_think

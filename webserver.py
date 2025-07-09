@@ -1,3 +1,4 @@
+#얜 왜 있는 거지?
 from flask import Flask
 from threading import Thread
 
