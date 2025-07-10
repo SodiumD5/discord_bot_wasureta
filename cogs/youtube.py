@@ -15,8 +15,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 FFMPEG_ADDRESS = os.getenv("FFMPEG_ADDRESS")
-YOUTUBE_EMAIL = os.getenv("YOUTUBE_EMAIL")
-YOUTUBE_PASSWORD = os.getenv("YOUTUBE_PASSWORD")
+COOKIE = 'cookies/txt'
 
 #서버별 독립적인 데이터를 저장할 딕셔너리 (절대 전역 변수 안됨)
 server_queues = {}
@@ -58,8 +57,7 @@ class youtube(commands.Cog):
     yt_dl_opts = {'format': 'bestaudio/best', 
                   'extract_flat' : 'in_playlist', 
                   'ratelimit' : 0,
-                  'username' : YOUTUBE_EMAIL,
-                  'passward' : YOUTUBE_PASSWORD
+                  'cookiefile' : COOKIE
                  }
     ytdl = yt_dlp.YoutubeDL(yt_dl_opts)
     ffmpeg_options = {'options' : '-vn', 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'}
