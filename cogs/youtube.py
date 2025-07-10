@@ -53,11 +53,17 @@ def get_message(page, deq, content_elements):
 class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
+    
+    cookies_path = '/tmp/cookies.txt'
+    
+    with open(cookies_path, 'w', encoding='utf-8') as f:
+        f.write(COOKIE)
+    print(f"Cookies saved to {cookies_path}")
+        
     yt_dl_opts = {'format': 'bestaudio/best', 
                   'extract_flat' : 'in_playlist', 
                   'ratelimit' : 0,
-                  'cookiefile' : COOKIE
+                  'cookiefile' : cookies_path
                  }
     ytdl = yt_dlp.YoutubeDL(yt_dl_opts)
     ffmpeg_options = {'options' : '-vn', 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'}
