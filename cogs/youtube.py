@@ -15,7 +15,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 FFMPEG_ADDRESS = os.getenv("FFMPEG_ADDRESS")
-COOKIE = 'cookies/txt'
+COOKIE = os.getenv("COOKIE")
 
 #서버별 독립적인 데이터를 저장할 딕셔너리 (절대 전역 변수 안됨)
 server_queues = {}
