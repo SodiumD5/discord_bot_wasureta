@@ -15,6 +15,8 @@ bot = commands.Bot(command_prefix = "!", intents = intents)
 
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
+print(TOKEN)
+print(type(TOKEN))
 
 @bot.event
 async def on_ready():
