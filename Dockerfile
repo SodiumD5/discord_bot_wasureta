@@ -1,8 +1,10 @@
-FROM python:3.11-alpine
+FROM python:3.9-alpine
 
-RUN apk add --no-cache ffmpeg
+RUN apk add --no-cache ffmpeg opus-dev libsodium-dev python3-dev g++ make && rm -rf /var/cache/apk/*
 
 WORKDIR /app
+
+ENV LD_LIBRARY_PATH=/usr/lib
 
 COPY requirements.txt .
 

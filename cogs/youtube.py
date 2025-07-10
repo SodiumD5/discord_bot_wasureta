@@ -10,6 +10,9 @@ import os
 import random
 import to_supabase
 import crolling
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 FFMPEG_ADDRESS = os.getenv("FFMPEG_ADDRESS")
 
@@ -66,7 +69,6 @@ class youtube(commands.Cog):
             url = to_supabase.find_url_data(server_nowplay[guild_id][1])
             loop = asyncio.get_event_loop()
             
-            print(url)
             data = await loop.run_in_executor(None, self.sodiumd_extract_info, url[0][2])
             new_url = data['url']
             new_music_info = discord.FFmpegPCMAudio(new_url, executable=FFMPEG_ADDRESS, **self.ffmpeg_options)
@@ -92,7 +94,7 @@ class youtube(commands.Cog):
 
     async def handle_after_callback(self, ctx, error):
         if error:
-            print(f"Playback error: {error}")
+            logging.info(f"Playback error: {error}")
         else:
             # 다음 곡을 비동기로 재생
             await self.play_next(ctx)
@@ -213,7 +215,7 @@ class youtube(commands.Cog):
                 await smart_send(ctx, "먼저 음성 채널에 들어가 주세요")
 
         except Exception as err:
-            print(err)
+            logging.info(err)
             await smart_send(ctx, "오류가 발생하여 음악을 재생할 수 없습니다.")
 
     async def show5_music(self, ctx, search_output, form_title, message_temp):
@@ -288,7 +290,7 @@ class youtube(commands.Cog):
                 await smart_send(ctx, "먼저 음성 채널에 들어가 주세요")
 
         except Exception as err:
-            print(err)
+            logging.info(err)
             await smart_send(ctx, "오류가 발생하여 음악을 재생할 수 없습니다.")
 
     async def reload(self, ctx, deq, page):
@@ -468,10 +470,10 @@ class youtube(commands.Cog):
         guild_id = ctx.guild.id
         top10_data, info = to_supabase.server_song_ranking(guild_id)
         
-        message_temp = f'### 총 *{info['total_number_songs']}*곡 *{info['total_number_plays']}*회 재생 중\n'
+        message_temp = f'### 총 *{info["total_number_songs"]}*곡 *{info["total_number_plays"]}*회 재생 중\n'
 
         for i, k in enumerate(top10_data):
-            message_temp += f'{i+1}위 {k['song_name']} : ```diff\n+{k['total_repeated']}회 재생 됨```\n'
+            message_temp += f'{i+1}위 {k["song_name"]} : ```diff\n+{k["total_repeated"]}회 재생 됨```\n'
 
         await self.top10(ctx, top10_data, f"{ctx.guild.name}서버 재생 순위", message_temp)
 
@@ -485,10 +487,10 @@ class youtube(commands.Cog):
             user_name = ctx.author.name
         top10_data, info = to_supabase.user_song_ranking(guild_id, user_name)
         
-        message_temp = f'### 총 *{info['total_number_songs']}*곡 *{info['total_number_plays']}*회 재생 중\n'
+        message_temp = f'### 총 *{info["total_number_songs"]}*곡 *{info["total_number_plays"]}*회 재생 중\n'
     
         for i, k in enumerate(top10_data):
-            message_temp += f'{i+1}위 {k['song_name']} : ```diff\n+{k['total_repeated']}회 재생 됨```\n'
+            message_temp += f'{i+1}위 {k["song_name"]} : ```diff\n+{k["total_repeated"]}회 재생 됨```\n'
         
         #없는 or 아직 아무것도 노래를 안 튼 경우
         if message_temp == '':
