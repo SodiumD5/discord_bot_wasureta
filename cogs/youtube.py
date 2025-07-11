@@ -53,12 +53,6 @@ def get_message(page, deq, content_elements):
 class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-    
-    cookies_path = '/tmp/cookies.txt'
-    
-    with open(cookies_path, 'w', encoding='utf-8') as f:
-        f.write(COOKIE)
-    print(f"Cookies saved to {cookies_path}")
         
     yt_dl_opts = {'format': 'bestaudio/best', 
                   'extract_flat' : 'in_playlist', 
