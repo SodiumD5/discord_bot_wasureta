@@ -54,7 +54,7 @@ class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
     
-    cookies_path = 'cookies.txt'
+    cookies_path = os.path.join(os.path.dirname(__file__), 'cookies.txt')
     
     with open(cookies_path, 'w', encoding='utf-8') as f:
         f.write(COOKIE)
