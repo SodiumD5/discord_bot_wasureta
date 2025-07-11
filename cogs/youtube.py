@@ -66,6 +66,8 @@ class youtube(commands.Cog):
                   'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
                   'sleep_requests': 1,
                   'sleep_interval': 2,
+                  'username': 'oauth2',
+                  'password': '',
                  }
     ytdl = yt_dlp.YoutubeDL(yt_dl_opts)
     ffmpeg_options = {'options' : '-vn', 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'}
