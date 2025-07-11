@@ -14,7 +14,6 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-FFMPEG_ADDRESS = os.getenv("FFMPEG_ADDRESS")
 COOKIE = os.getenv("COOKIE")
 
 #서버별 독립적인 데이터를 저장할 딕셔너리 (절대 전역 변수 안됨)
@@ -85,7 +84,7 @@ class youtube(commands.Cog):
             
             data = await loop.run_in_executor(None, self.sodiumd_extract_info, url[0][2])
             new_url = data['url']
-            new_music_info = discord.FFmpegPCMAudio(new_url, executable=FFMPEG_ADDRESS, **self.ffmpeg_options)
+            new_music_info = discord.FFmpegPCMAudio(new_url, **self.ffmpeg_options)
 
             if server_isrepeat[guild_id] == "이 곡 반복":
                 deq.appendleft([new_music_info, server_nowplay[guild_id][1], server_nowplay[guild_id][2]])
@@ -133,7 +132,7 @@ class youtube(commands.Cog):
         #db에 추가
         to_supabase.save_title_data(title, video_url)
 
-        music_info = discord.FFmpegPCMAudio(song, executable=FFMPEG_ADDRESS, **self.ffmpeg_options)
+        music_info = discord.FFmpegPCMAudio(song, **self.ffmpeg_options)
         return [music_info, title, applicant]
 
     #남은 곡을 재생시키는 함수
@@ -181,7 +180,7 @@ class youtube(commands.Cog):
             is_playlist = 1 #플리가 아닐 경우 1곡임. 
             new_url = data['url']
             to_supabase.save_title_data(title, url)
-            music_info = discord.FFmpegPCMAudio(new_url, executable=FFMPEG_ADDRESS, **self.ffmpeg_options)
+            music_info = discord.FFmpegPCMAudio(new_url, **self.ffmpeg_options)
             if title != "wasureta":
                 deq.append([music_info, title, applicant]) #곡의 정보, 제목, 그 곡의 신청자이름
                 await self.call_executer(ctx, voice_client, is_playlist, title)
@@ -458,7 +457,7 @@ class youtube(commands.Cog):
                     video_data = await loop.run_in_executor(None, self.sodiumd_extract_info, link[0]["link"])
 
                     title = top10_data[i]["song_name"]
-                    music_info = discord.FFmpegPCMAudio(video_data['url'], executable=FFMPEG_ADDRESS, **self.ffmpeg_options)
+                    music_info = discord.FFmpegPCMAudio(video_data['url'], **self.ffmpeg_options)
                     deq.append([music_info, title, applicant])
 
                 for item in view.children:
