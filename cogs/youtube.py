@@ -10,6 +10,7 @@ import random
 import to_supabase
 import crolling
 import logging
+import time
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -18,6 +19,8 @@ server_queues = {}
 server_nowplay = {}
 server_isrepeat = {}
 server_playtime = {}
+server_pausetime = {}
+server_isplaying = {}
 
 def get_server_data(guild_id):
     if guild_id not in server_queues:
@@ -40,23 +43,33 @@ async def smart_send(ctx, content):
     else:
         await ctx.send(content, reference = ctx.message)
 
-def change_durating_string(data):
-    hour = data[:-6]
-    minute = data[-5:-3]
-    second = data[-2:]
-    return hour, minute, second
+def change_duration_string(data):
+    parts = list(map(int, data.split(":")))
+    if len(parts) <= 2:
+        return f"{parts[0]}분 {parts[1]}초"
+    else:
+        return f"{parts[0]}시간 {parts[1]}분 {parts[2]}초"
+    
+def change_duration_stirng_to_int(data):
+    parts = list(map(int, data.split(":")))
+    total_time = 0
+    for i in range(len(parts)):
+        total_time += 60**i*parts[-i-1]
+    return total_time
+    
+def change_time_to_string(time):
+    second = time%60
+    minute = time//60
+    if minute < 60:
+        return f"{minute}분 {second}초"
+    else:
+        return f"{minute//60}시간 {minute%60}분 {second}초"
     
 def get_message(page, deq, content_elements):
     message_temp = ''
     for i in range(content_elements):
-        hour, minute, second = change_durating_string(deq[10*page+i][3])
-        if hour == "":
-            if minute == "":
-                message_temp += f'{10*page+i+1}번 (추가자 - {deq[10*page+i][2]}) : {deq[10*page+i][1]} \n**(재생시간 : {second}초)**\n\n'
-            else:
-                message_temp += f'{10*page+i+1}번 (추가자 - {deq[10*page+i][2]}) : {deq[10*page+i][1]} \n**(재생시간 : {minute}분 {second}초)**\n\n'
-        else:
-            message_temp += f'{10*page+i+1}번 (추가자 - {deq[10*page+i][2]}) : {deq[10*page+i][1]} \n**(재생시간 : {hour}시간 {minute}분 {second}초)**\n\n'
+        changed_duration = change_duration_string(deq[10*page+i][3])
+        message_temp += f'{10*page+i+1}번 (추가자 - {deq[10*page+i][2]}) : {deq[10*page+i][1]} \n**(재생시간 : {changed_duration})**\n\n'
        
     return message_temp
 
@@ -103,12 +116,17 @@ class youtube(commands.Cog):
             except KeyError:
                 pass
             
-            #재생
+            #재생시작
             server_nowplay[guild_id] = deq[0]
             next_play = deq.popleft()
             ctx.guild.voice_client.play(next_play[0], after= lambda e: asyncio.run_coroutine_threadsafe(
                 self.handle_after_callback(ctx, e), ctx.bot.loop
             ))
+            
+            #재생시간 설정
+            server_playtime[guild_id] = time.time()
+            server_isplaying[guild_id] = True
+            
             #sql 넣기
             to_supabase.add_sql(guild_id, next_play[2], next_play[1])
         else: #큐가 다 끝남 -> 리소스 줄이기 위해서 나가기
@@ -457,6 +475,7 @@ class youtube(commands.Cog):
     @wasu_think
     async def skip(self, ctx):
         """현재 재생 중인 음악을 스킵한다."""
+        guild_id = ctx.guild.id
         voice_client = ctx.guild.voice_client
         if voice_client and voice_client.is_playing():
             voice_client.pause()
@@ -466,6 +485,7 @@ class youtube(commands.Cog):
             else:
                 await smart_send(ctx, "모든 노래가 재생되어, 봇이 나갔습니다.")
         else:
+            server_playtime[guild_id] = time.time() #초기화
             await smart_send(ctx, "현재 재생 중이 아니거나, 통화방에 없습니다.")
 
     @commands.hybrid_command(name = "pause", description = "현재 재생 중인 음악을 정지하거나 재개한다.")
@@ -473,10 +493,15 @@ class youtube(commands.Cog):
     async def pause(self, ctx):
         """현재 재생 중인 음악을 정지하거나 재개한다."""
         voice_client = ctx.guild.voice_client
+        guild_id = ctx.guild.id
         if voice_client.is_playing():
+            server_pausetime[guild_id] = time.time()
+            server_isplaying[guild_id] = False
             voice_client.pause()
             await smart_send(ctx, "정지하였습니다.")
         else:
+            server_playtime[guild_id] += (time.time()-server_pausetime[guild_id]) #정지한 시간만큼 시작시간 늦추기
+            server_isplaying[guild_id] = True
             voice_client.resume()
             await smart_send(ctx, "다시 시작하였습니다.")
 
@@ -573,23 +598,37 @@ class youtube(commands.Cog):
         deq = get_server_data(guild_id)
         page = 0
 
-        if not ctx.guild.voice_client or not voice_client.is_playing(): #아예 재생 중이 아닐 경우
+        if (ctx.guild.voice_client and voice_client.is_playing()) or server_isplaying[guild_id] == False: #아예 재생 중이 아닐 경우
+            now_link = to_supabase.find_url_data(server_nowplay[guild_id][1])
+            play_time = round(time.time()-server_playtime[guild_id])
+            original_time = change_duration_stirng_to_int(now_link[0]["duration"])
+            changed_play_time = change_time_to_string(play_time)
+            changed_original_time = change_duration_string(now_link[0]["duration"])
+            
+            progress = ""
+            filled_box = round(play_time*20/original_time)
+            for _ in range(filled_box):
+                progress += "█"
+            for _ in range(20-filled_box):
+                progress += "─"
+            
+            message = f'현재 곡 : {now_link[0]["title"]}\n링크 : {now_link[0]["link"]}\n\n 진행도 : {progress}\n **(재생시간 : {changed_play_time} / {changed_original_time})**'
+            
+            if len(deq) == 0: #1곡만 있을 경우
+                await smart_send(ctx, message)
+            else: #여러곡 있을 경우
+                video_id = now_link[0]["link"].split("v=")[-1]
+                thumbnail_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+
+                view, content_elements, page = await self.reload(ctx, deq, page)
+                many_song_message = get_message(page, deq, content_elements)
+                many_song_message += message
+
+                embed = discord.Embed(title=f"대기열 총 {len(deq)}곡", description=many_song_message)
+                embed.set_image(url = thumbnail_url)
+                await ctx.send(embed = embed, view = view)
+        else:
             await smart_send(ctx, "현재 재생 중이 아닙니다.")
-        elif len(deq) == 0: #1곡만 있을 경우
-            now_link = to_supabase.find_url_data(server_nowplay[guild_id][1])
-            await smart_send(ctx, f'현재 곡 : {now_link[0]["title"]}\n링크 : {now_link[0]["link"]}')
-        else: #여러곡 있을 경우
-            now_link = to_supabase.find_url_data(server_nowplay[guild_id][1])
-            video_id = now_link[0]["link"].split("v=")[-1]
-            thumbnail_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
-            
-            view, content_elements, page = await self.reload(ctx, deq, page)
-            message = f'\n**현재 곡 : {now_link[0]["title"]} \n링크 : {now_link[0]["link"]}**'
-            message += get_message(page, deq, content_elements)
-            
-            embed = discord.Embed(title=f"대기열 총 {len(deq)}곡", description=message)
-            embed.set_image(url = thumbnail_url)
-            await ctx.send(embed = embed, view = view)
             
     @commands.hybrid_command(name = "last-played", description = "서버에서 가장 마지막으로 틀었던 노래의 제목과 링크를 준다.")
     @wasu_think
@@ -597,17 +636,10 @@ class youtube(commands.Cog):
         """서버에서 가장 마지막으로 틀었던 노래의 제목과 링크를 준다."""
         guild_id = ctx.guild.id
         last_played_info = to_supabase.search_lastplay(guild_id)
-        hour, minute, second = change_durating_string(last_played_info[0]["duration"])
+        changed_duration = change_duration_string(last_played_info[0]["duration"])
         
         view = View(timeout = 30) 
-        time_description = ""
-        if hour == "":
-            if minute == "":
-                time_description = f"**(재생시간 : {second}초)**"
-            else:
-                time_description = f"**(재생시간 : {minute}분 {second}초)**"
-        else:
-            time_description = f"**(재생시간 : {hour}시간 {minute}분 {second}초)**"
+        time_description = f"**(재생시간 : {changed_duration})**"
         embed = discord.Embed(title=f"마지막 재생 곡", description=f"마지막 곡 : {last_played_info[0]["title"]} {time_description}\n 링크 : {last_played_info[0]["link"]}")
         
         video_id = last_played_info[0]["link"].split("v=")[-1]
@@ -666,7 +698,6 @@ class youtube(commands.Cog):
             temp = end_num
             end_num = start_num
             start_num = temp
-        
         
         for i in result:
                 message_temp += f'{j}번 노래 : {i["song_name"]} \n\n'
