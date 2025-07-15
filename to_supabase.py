@@ -92,10 +92,10 @@ def find_music(server_id, song_name): #해당 노래의 재생 횟수
 
 
 #title 테이블 관련
-def save_title_data(title, link):
+def save_title_data(title, link, duration):
     response = supabase.table("title").select("*").eq("title", title).execute()
     if not response.data:
-        supabase.table("title").insert({"title" : title, "link" : link}).execute()
+        supabase.table("title").insert({"title" : title, "link" : link, "duration" : duration}).execute()
 
 def find_url_data(title):
     response = supabase.table("title").select("*").eq("title", title).execute()
@@ -106,7 +106,7 @@ def search_lastplay(server_id):
     response = supabase.table("last_play").select("*").eq("server_id", server_id).execute()
     return response.data
 
-def update_lastplay(server_id, title, link):
-    data = {"server_id" : server_id, "title" : title, "link" : link, "date": datetime.now().isoformat()}
+def update_lastplay(server_id, title, link, duration):
+    data = {"server_id" : server_id, "title" : title, "link" : link, "date": datetime.now().isoformat(), "duration": duration}
     supabase.table("last_play").upsert(data, on_conflict="server_id").execute() 
     
