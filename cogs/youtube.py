@@ -6,15 +6,12 @@ import discord
 import asyncio
 import yt_dlp
 import functools
-import os
 import random
 import to_supabase
 import crolling
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-COOKIE = os.getenv("COOKIE")
 
 #서버별 독립적인 데이터를 저장할 딕셔너리 (절대 전역 변수 안됨)
 server_queues = {}
@@ -53,19 +50,9 @@ class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
     
-    cookies_path = os.path.join(os.path.dirname(__file__), 'cookies.txt')
-    
-    with open(cookies_path, 'w', encoding='utf-8') as f:
-        f.write(COOKIE)
-    print(f"Cookies saved to {cookies_path}")
-    
     yt_dl_opts = {'format': 'bestaudio/best', 
                   'extract_flat' : 'in_playlist', 
-                  'ratelimit' : '50K',
-                  'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-                  'sleep_requests': 1,
-                  'sleep_interval': 2,
-                  'cookiefile' : cookies_path
+                  'ratelimit' : '0'
                  }
     ytdl = yt_dlp.YoutubeDL(yt_dl_opts)
     ffmpeg_options = {'options' : '-vn', 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'}
@@ -92,6 +79,15 @@ class youtube(commands.Cog):
                 deq.append([new_music_info, server_nowplay[guild_id][1], server_nowplay[guild_id][2]]) #deq꺼를 그대로 가져와서 0번이 변환된 url, 1번이 title, 2번이 신청자이름임 
 
         if len(deq) > 0:
+            #이전 노래이기 때문에, 다음노래로 바꾸기 전에, 방금튼거로 바꿔줘야함. 서버당 딱 한 번만 존재하지 않아서, 아래 에러가 남.
+            try:
+                _title_data = server_nowplay[guild_id][1]
+                _link_data = to_supabase.find_url_data(_title_data)[0]["link"]
+                to_supabase.update_lastplay(guild_id, _title_data, _link_data)
+            except KeyError:
+                pass
+            
+            #재생
             server_nowplay[guild_id] = deq[0]
             next_play = deq.popleft()
             ctx.guild.voice_client.play(next_play[0], after= lambda e: asyncio.run_coroutine_threadsafe(
@@ -101,6 +97,10 @@ class youtube(commands.Cog):
             #sql 넣기
             to_supabase.add_sql(guild_id, next_play[2], next_play[1])
         else: #큐가 다 끝남 -> 리소스 줄이기 위해서 나가기
+            _title_data = server_nowplay[guild_id][1]
+            _link_data = to_supabase.find_url_data(_title_data)[0]["link"]
+            to_supabase.update_lastplay(guild_id, _title_data, _link_data)
+            
             await ctx.guild.voice_client.disconnect()
             await smart_send(ctx, "연결을 끊었습니다.")
 
@@ -307,7 +307,7 @@ class youtube(commands.Cog):
             await smart_send(ctx, "오류가 발생하여 음악을 재생할 수 없습니다.")
 
     async def reload(self, ctx, deq, page):
-        view = View(timeout=60)
+        view = View(timeout=30)
         
         content_elements = 10
         if page == len(deq)//10: #마지막 페이지일 경우 
@@ -402,6 +402,8 @@ class youtube(commands.Cog):
             await self.play_next(ctx)
             if voice_client and voice_client.is_playing():
                 await smart_send(ctx, "다음 노래가 재생됩니다.")
+            else:
+                await smart_send(ctx, "모든 노래가 재생되어, 봇이 나갔습니다.")
         else:
             await smart_send(ctx, "현재 재생 중이 아니거나, 통화방에 없습니다.")
 
@@ -572,6 +574,43 @@ class youtube(commands.Cog):
             await smart_send(ctx, f'현재 곡 : {now_link[0]["title"]} \n링크 : {now_link[0]["link"]}')
         else:
             await smart_send(ctx, "현재 재생 중이 아닙니다.")
+            
+    @commands.hybrid_command(name = "last-played", description = "서버에서 가장 마지막으로 틀었던 노래의 제목과 링크를 준다.")
+    @wasu_think
+    async def last_played(self, ctx):
+        """서버에서 가장 마지막으로 틀었던 노래의 제목과 링크를 준다."""
+        guild_id = ctx.guild.id
+        last_played_info = to_supabase.search_lastplay(guild_id)
+
+        view = View(timeout = 30) 
+        embed = discord.Embed(title=f"마지막 재생 곡", description=f"마지막 곡 : {last_played_info[0]["title"]}\n 링크 : {last_played_info[0]["link"]}")
+        video_id = last_played_info[0]["link"].split("v=")[-1]
+        thumbnail_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+        embed.set_image(url = thumbnail_url)
+
+        last_played = Button(label="재생하기", style = discord.ButtonStyle.green)
+        async def last_played_callback(interaction):
+            voice_client = ctx.guild.voice_client
+            applicant = ctx.author.name
+            #아무응답을 안하면서, 상호작용 실패 방어
+            await interaction.response.defer()
+
+            #버튼 비활성화 시키기
+            for item in view.children:
+                item.disabled = True
+            await interaction.message.edit(view=view)
+
+            if interaction and ctx.author.voice:
+                if not voice_client: #봇이 연결이 안되어 있을 경우, 연결시키기
+                    voice_client = await ctx.author.voice.channel.connect()
+                    server_isrepeat[ctx.guild.id] = "반복 안 함"
+                await self.append_music(ctx, last_played_info[0]["link"], applicant, voice_client, last_played_info[0]["title"])
+            else:
+                await ctx.send("먼저 음성 채널에 들어가 주세요")
+    
+        last_played.callback = last_played_callback
+        view.add_item(last_played)
+        await ctx.send(embed = embed, view = view)
 
     @commands.hybrid_command(name = "playlist", description = "해당 유저가 많이 틀었던 노래 플레이리스트를 랜덤으로 뽑아준다.")
     @app_commands.describe(

@@ -100,3 +100,13 @@ def save_title_data(title, link):
 def find_url_data(title):
     response = supabase.table("title").select("*").eq("title", title).execute()
     return response.data
+
+#last_play 테이블 관련
+def search_lastplay(server_id):
+    response = supabase.table("last_play").select("*").eq("server_id", server_id).execute()
+    return response.data
+
+def update_lastplay(server_id, title, link):
+    data = {"server_id" : server_id, "title" : title, "link" : link, "date": datetime.now().isoformat()}
+    supabase.table("last_play").upsert(data, on_conflict="server_id").execute() 
+    
