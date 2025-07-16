@@ -505,7 +505,49 @@ class youtube(commands.Cog):
         except Exception as err:
             logging.info(err)
             await smart_send(ctx, "오류가 발생하여 음악을 재생할 수 없습니다.")
-    
+
+    @commands.hybrid_command(name = "jump", description = "12:34와 같이 입력하여, 해당 노래를 12분 34초로 스킵할 수 있다.")
+    @wasu_think
+    async def jump(self, ctx, jump_to:str):
+        """12:34와 같이 입력하여, 해당 노래를 12분 34초로 스킵할 수 있다."""
+        try:
+            parts = list(map(int, jump_to.split(":")))
+            target_time = 0
+            for i in range(len(parts)):
+                target_time += 60**i*(parts[-1-i])
+            
+            if ctx.author.voice:
+                voice_client = ctx.voice_client
+                guild_id = ctx.guild.id
+                if voice_client and voice_client.is_playing(): 
+                    #현재노래의 총 재생시간 먼저 확인하기
+                    url_info = to_supabase.find_url_data(server_nowplay[guild_id][1])
+                    duration = url_info[0]["duration"]
+                    original_time = change_duration_stirng_to_int(duration)
+                    if original_time >= target_time+10:
+                        loop = asyncio.get_event_loop()
+                        video_data = await loop.run_in_executor(None, self.sodiumd_extract_info, url_info[0]["link"])
+                        music_info = discord.FFmpegPCMAudio(video_data['url'], before_options=f'-ss {target_time}', options=f'-t {round(max(10, original_time-target_time))}')
+
+                        deq = get_server_data(guild_id)
+                        deq.appendleft([music_info, server_nowplay[guild_id][1], server_nowplay[guild_id][2], duration])
+
+                        voice_client.pause()
+                        await self.play_next(ctx)
+                        
+                        #현재곡 재생시간 업데이트
+                        server_playtime[guild_id] = time.time() - target_time
+                        await smart_send(ctx, f"현재 노래를 {jump_to}로 건너 뜁니다.")
+                    else:
+                        await smart_send(ctx, "지정하신 시간은 노래의 끝 부분과 너무 가깝습니다. 노래가 끝나기 최소 10초 전 지점까지만 건너뛸 수 있습니다.")
+                else: 
+                    await smart_send(ctx, "현재 재생 중이 아닙니다.")
+            else:
+                await smart_send(ctx, "먼저 음성 채널에 들어가 주세요")
+                
+        except ValueError:
+            await smart_send(ctx, "잘못된 입력입니다.")
+        
     @commands.hybrid_command(name = "skip", description = "현재 재생 중인 음악을 스킵한다.")
     @wasu_think
     async def skip(self, ctx):
@@ -871,7 +913,6 @@ class youtube(commands.Cog):
             message_temp += f'{i+1}번 노래 : {title}\n\n'
         
         await self.show5_music(ctx, gd_data, "미상이가 좋아하는 랜덤 노래", message_temp)
-
 
 async def setup(bot):
     await bot.add_cog(youtube(bot))
