@@ -78,6 +78,7 @@ class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.check_voice_channels.start()
+        self.is_jump = {}
     
     yt_dl_opts = {'format': 'bestaudio/best', 
                   'extract_flat' : 'in_playlist', 
@@ -89,6 +90,10 @@ class youtube(commands.Cog):
     #음악 채워주는 함수
     async def play_next(self, ctx):
         #해당 길드에서의 큐랑 재생 횟수를 가져옴. 
+        if ctx.guild.id in self.is_jump and self.is_jump[ctx.guild.id]:
+            self.is_jump[ctx.guild.id] = False
+            return
+        
         guild_id = ctx.guild.id 
         deq = get_server_data(guild_id)
 
@@ -524,16 +529,19 @@ class youtube(commands.Cog):
                     url_info = to_supabase.find_url_data(server_nowplay[guild_id][1])
                     duration = url_info[0]["duration"]
                     original_time = change_duration_stirng_to_int(duration)
+                    print(original_time, target_time)
                     if original_time >= target_time+10:
                         loop = asyncio.get_event_loop()
                         video_data = await loop.run_in_executor(None, self.sodiumd_extract_info, url_info[0]["link"])
-                        music_info = discord.FFmpegPCMAudio(video_data['url'], before_options=f'-ss {target_time}', options=f'-t {round(max(10, original_time-target_time))}')
+                        
+                        #ffmpeg설정 (아까는 설정할 때, 끊김방지가 방지가 없어서 연결불량 땜에 30초만에 꺼진거였음)
+                        ffmpeg_options = self.ffmpeg_options.copy()
+                        ffmpeg_options['before_options'] = f'-ss {target_time} {ffmpeg_options["before_options"]}'
+                        music_info = discord.FFmpegPCMAudio(video_data['url'], **ffmpeg_options)
 
-                        deq = get_server_data(guild_id)
-                        deq.appendleft([music_info, server_nowplay[guild_id][1], server_nowplay[guild_id][2], duration])
-
-                        voice_client.pause()
-                        await self.play_next(ctx)
+                        self.is_jump[guild_id] = True
+                        ctx.voice_client.stop()
+                        ctx.voice_client.play(music_info, after=lambda e: asyncio.run_coroutine_threadsafe(self.handle_after_callback(ctx, e), self.bot.loop))
                         
                         #현재곡 재생시간 업데이트
                         server_playtime[guild_id] = time.time() - target_time
