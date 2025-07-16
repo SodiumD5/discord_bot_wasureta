@@ -66,13 +66,13 @@ def user_song_ranking(server_id, user_name): #각 유저의 재생 순위
 
 def random_user_playlist(server_id, user_name, start_num, end_num): #그 사람이름으로 랜덤 플리 생성
     if user_name == None: #유저이름이 없는 경우, 서버로 대체
-        response = supabase.rpc("show_server_ranking", {
+        response = supabase.rpc("make_server_playlist", {
         "p_server_id": server_id,
         "p_limit" : end_num-start_num+1,
         "p_start_index" : start_num-1
         }).execute()
     else:
-        response = supabase.rpc("show_user_ranking", {
+        response = supabase.rpc("make_user_playlist", {
         "p_server_id": server_id,
         "p_user_name": user_name,
         "p_limit" : end_num-start_num+1,
@@ -90,6 +90,11 @@ def find_music(server_id, song_name): #해당 노래의 재생 횟수
     
     return response.data
 
+def show_server_ranking(server_id):
+    response = supabase.rpc("show_server_ranking",{
+        "p_server_id" : server_id
+    }).execute()
+    return response.data
 
 #title 테이블 관련
 def save_title_data(title, link, duration):

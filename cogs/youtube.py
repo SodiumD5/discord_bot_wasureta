@@ -1,4 +1,4 @@
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.ui import Button, View
 from discord import app_commands
 from collections import deque
@@ -21,6 +21,7 @@ server_isrepeat = {}
 server_playtime = {}
 server_pausetime = {}
 server_isplaying = {}
+server_voice_active = {}
 
 def get_server_data(guild_id):
     if guild_id not in server_queues:
@@ -76,6 +77,7 @@ def get_message(page, deq, content_elements):
 class youtube(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.check_voice_channels.start()
     
     yt_dl_opts = {'format': 'bestaudio/best', 
                   'extract_flat' : 'in_playlist', 
@@ -432,6 +434,39 @@ class youtube(commands.Cog):
         
         return view, content_elements, page
     
+    @tasks.loop(seconds=10)
+    async def check_voice_channels(self):
+        print("음성 채널 연결 확인 중")
+        for guild in self.bot.guilds:
+            voice_client = guild.voice_client
+            if voice_client != None:
+                active_human = 0
+                member_list = voice_client.channel.members
+                for data in member_list:
+                    if data.bot == False:
+                        active_human += 1
+                
+                current_time = round(time.time())
+                if active_human == 0:
+                    if guild.id not in server_voice_active:
+                        server_voice_active[guild.id] = {"is_all_bot" : True, "record_time" : current_time}
+                    else:
+                        if server_voice_active[guild.id]["is_all_bot"] == True:
+                            leave_time = time.time() - server_voice_active[guild.id]["record_time"]
+                            if leave_time >= 60*10:
+                                server_voice_active[guild.id]["is_all_bot"] = False #따로 명령어 방을 기록해두는 작업이 복잡하기에, 그냥 생략한다.
+                                await voice_client.disconnect()
+                        else:
+                            server_voice_active[guild.id]["is_all_bot"] = True
+                            server_voice_active[guild.id]["record_time"] = current_time
+                else:
+                    if guild.id not in server_voice_active:
+                        server_voice_active[guild.id] = {"is_all_bot" : False, "record_time" : current_time}
+                    else:
+                        server_voice_active[guild.id]["is_all_bot"] = False
+                        
+                print(server_voice_active, f"active_human : {active_human}")
+                    
     #여기서부턴, 디코에 들어가는 명령어들
     @commands.hybrid_command(name="play", description = "유튜브 링크를 가져오면 음악을 재생한다/검색어를 입력하면 5개 중에 선택이 가능하다.")
     @wasu_think
@@ -470,7 +505,7 @@ class youtube(commands.Cog):
         except Exception as err:
             logging.info(err)
             await smart_send(ctx, "오류가 발생하여 음악을 재생할 수 없습니다.")
-
+    
     @commands.hybrid_command(name = "skip", description = "현재 재생 중인 음악을 스킵한다.")
     @wasu_think
     async def skip(self, ctx):
@@ -504,6 +539,19 @@ class youtube(commands.Cog):
             server_isplaying[guild_id] = True
             voice_client.resume()
             await smart_send(ctx, "다시 시작하였습니다.")
+
+    @commands.hybrid_command(name = "ranking", description = "서버에서 각 멤버가 몇 번씩 재생하였는 지 순위를 알려준다.")
+    @wasu_think
+    async def ranking(self, ctx):
+        """서버에서 각 멤버가 몇 번씩 재생하였는 지 순위를 알려준다."""
+        guild_id = ctx.guild.id
+        top10_data = to_supabase.show_server_ranking(guild_id)
+        _, info = to_supabase.server_song_ranking(guild_id)
+        message = f'### 총 *{info["total_number_songs"]}*곡 *{info["total_number_plays"]}*회 재생 중\n'
+        
+        for i, k in enumerate(top10_data):
+            message += f'{i+1}위 {k["user_name"]} : ```diff\n+{k["play_count"]}회 재생함```\n'
+        await ctx.send(embed = discord.Embed(title = f"{ctx.guild.name}서버 재생 순위", description = message))
 
     @commands.hybrid_command(name = "search-server-top10", description = "해당 서버에서 가장 많이 재생된 음악을을 알려준다.")
     @wasu_think
@@ -583,9 +631,9 @@ class youtube(commands.Cog):
         voice_client = ctx.guild.voice_client
 
         if ctx.author.voice and ctx.guild.voice_client and voice_client.is_playing():
+            server_queues[ctx.guild.id] = deque() #초기화 
             await ctx.guild.voice_client.disconnect()
             await smart_send(ctx, "연결을 끊었습니다.")
-            server_queues[ctx.guild.id] = deque() #초기화 
         else:
             await smart_send(ctx, "이미 연결이 끊어져있습니다.")
 
@@ -640,7 +688,7 @@ class youtube(commands.Cog):
         
         view = View(timeout = 30) 
         time_description = f"**(재생시간 : {changed_duration})**"
-        embed = discord.Embed(title=f"마지막 재생 곡", description=f"마지막 곡 : {last_played_info[0]["title"]} {time_description}\n 링크 : {last_played_info[0]["link"]}")
+        embed = discord.Embed(title=f"마지막 재생 곡", description=f"마지막 곡 : {last_played_info[0]["title"]} \n{time_description}\n링크 : {last_played_info[0]["link"]}")
         
         video_id = last_played_info[0]["link"].split("v=")[-1]
         thumbnail_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
