@@ -1,0 +1,81 @@
+from discord.ext import commands, tasks
+from discord.ui import Button, View
+from discord import app_commands
+from collections import deque
+from utils.music_controller import music_controller
+import discord, asyncio, yt_dlp, functools, random, data.to_supabase as to_supabase, crolling, logging, time
+from utils.forms import Form
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+
+class BasicCommands(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    async def cog_command_error(self, error):  # discord.py 지정 handler
+        logging.error(error)
+
+    async def channel_check(self, ctx):
+        author_channel = ctx.author.voice
+        bot_channel = ctx.guild.me.voice
+
+        # 같은 채널인지 확인
+        if author_channel and bot_channel:
+            if author_channel.channel.id != bot_channel.channel.id:
+                form = Form(message="봇과 같은 채널이 아닙니다.")
+                await form.smart_send(ctx)
+                return False
+        return True  # 같은 채널이거나 연결이 안되있으면 괜찮음
+
+    @commands.hybrid_command(name="play", description="유튜브 링크를 가져오면 음악을 재생한다/검색어를 입력하면 5개 중에 선택이 가능하다.")
+    async def play(self, ctx, search: str):
+        await ctx.defer()
+        if await self.channel_check(ctx):
+            await music_controller.play(ctx, search)
+
+    @commands.hybrid_command(name="skip", description="현재 재생 중인 음악을 스킵한다.")
+    async def skip(self, ctx):
+        await ctx.defer()
+        if await self.channel_check(ctx):
+            await music_controller.skip(ctx)
+
+    @commands.hybrid_command(name="pause", description="현재 재생 중인 음악을 정지하거나 재개한다.")
+    async def pause(self, ctx):
+        await ctx.defer()
+        if await self.channel_check(ctx):
+            await music_controller.pause(ctx)
+
+    @commands.hybrid_command(name="leave", description="wasureta를 내보낸다")
+    async def leave(self, ctx):
+        await ctx.defer()
+        if await self.channel_check(ctx):
+            await music_controller.refresh_que(ctx, is_leave=True)
+
+    @commands.hybrid_command(name="refresh-que", description="que의 모든 노래를 삭제합니다.")
+    async def refresh_que(self, ctx):
+        await ctx.defer()
+        if await self.channel_check(ctx):
+            await music_controller.refresh_que(ctx, is_leave=False)
+
+    @commands.hybrid_command(name="que", description="현재 재생 중인 곡 정보와 함께 현재 대기열이 몇 개의 음악이 남았는지 알려준다")
+    async def left_que(self, ctx):
+        await ctx.defer()
+        if await self.channel_check(ctx):
+            await music_controller.que(ctx)
+
+    @commands.hybrid_command(name="repeat", description="한 곡 반복이나, 현재플리를 반복 할 수 있습니다.")
+    async def repeat(self, ctx):
+        await ctx.defer()
+        if await self.channel_check(ctx):
+            await music_controller.repeat_control(ctx)
+
+    @commands.hybrid_command(name="jump", description="12:34와 같이 입력하여, 해당 노래를 12분 34초로 스킵할 수 있다.")
+    async def jump(self, ctx, jump_to: str):
+        await ctx.defer()
+        if await self.channel_check(ctx):
+            await music_controller.jump(ctx, jump_to)
+
+
+async def setup(bot):
+    await bot.add_cog(BasicCommands(bot))

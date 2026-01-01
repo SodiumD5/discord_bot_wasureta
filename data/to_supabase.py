@@ -11,11 +11,7 @@ load_dotenv()
 url = os.environ.get("SUPABASE_URL")
 key = os.environ.get("SUPABASE_KEY")
 
-EMAIL = os.environ.get("EMAIL")
-PW = os.environ.get("PW")
-
 supabase = create_client(url, key)
-supabase.auth.sign_in_with_password({"email": EMAIL, "password" : PW})
 
 #users테이블 관련
 def add_sql(server_id, user_name, song_name): #데이터 추가하기

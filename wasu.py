@@ -21,12 +21,11 @@ async def on_ready():
     activity = discord.Game(name="Wasureta 플레이")
     await bot.change_presence(status=discord.Status.online, activity=activity)
     logging.info(f'Logged on as {bot.user}!')
-    await load_cogs()
 
-#cog 추가 (클래스 설정)
-async def load_cogs():        
     for filename in os.listdir('./cogs'):
         if filename.endswith('.py'):
+            if filename in ["youtube.py"]:
+                continue
             try:
                 await bot.load_extension(f'cogs.{filename[:-3]}')
                 logging.info(f'{filename} : success')

@@ -7,7 +7,7 @@ import asyncio
 import yt_dlp
 import functools
 import random
-import to_supabase
+import data.to_supabase as to_supabase
 import crolling
 import logging
 import time
@@ -94,7 +94,7 @@ class youtube(commands.Cog):
             self.is_jump[ctx.guild.id] = False
             return
         
-        guild_id = ctx.guild.id 
+        guild_id = ctx.guild.id
         deq = get_server_data(guild_id)
 
         if guild_id not in server_isrepeat:
@@ -439,7 +439,7 @@ class youtube(commands.Cog):
         
         return view, content_elements, page
     
-    @tasks.loop(seconds=10)
+    @tasks.loop(seconds=60)
     async def check_voice_channels(self):
         print("음성 채널 연결 확인 중")
         for guild in self.bot.guilds:
@@ -529,7 +529,7 @@ class youtube(commands.Cog):
                     url_info = to_supabase.find_url_data(server_nowplay[guild_id][1])
                     duration = url_info[0]["duration"]
                     original_time = change_duration_stirng_to_int(duration)
-                    print(original_time, target_time)
+       
                     if original_time >= target_time+10:
                         loop = asyncio.get_event_loop()
                         video_data = await loop.run_in_executor(None, self.sodiumd_extract_info, url_info[0]["link"])
@@ -737,8 +737,11 @@ class youtube(commands.Cog):
         changed_duration = change_duration_string(last_played_info[0]["duration"])
         
         view = View(timeout = 30) 
+        last_title = last_played_info[0]['title']
+        last_link = last_played_info[0]['link']
         time_description = f"**(재생시간 : {changed_duration})**"
-        embed = discord.Embed(title=f"마지막 재생 곡", description=f"마지막 곡 : {last_played_info[0]["title"]} \n{time_description}\n링크 : {last_played_info[0]["link"]}")
+        descript = f"마지막 곡 : {last_title} \n{time_description}\n링크 : {last_link}"
+        embed = discord.Embed(title="마지막 재생 곡", description=descript)
         
         video_id = last_played_info[0]["link"].split("v=")[-1]
         thumbnail_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
