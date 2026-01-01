@@ -1,14 +1,6 @@
 import math
-from re import search
-from turtle import title
-from discord.ext import commands, tasks
-from discord.ui import Button, View
-from discord import app_commands
 from collections import deque
-import ffmpeg
-import discord, asyncio, yt_dlp, functools, random, data.to_supabase as to_supabase, crolling, logging, time
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+from utils.stopwatch import Stopwatch
 
 
 # discord.py에서는 서버를 guild라는 표현으로 쓴다. 모든 서버에 대한 의미는 guild라는 단어로 통일한다.
@@ -26,17 +18,12 @@ class Guild:
         elif pos == -1:
             self.queue.append(data)
 
-    def pop_queue(self, pos=0, overwrite=False):
+    def pop_queue(self, pos=0):
         if self.queue and pos == 0:
             song = self.queue.popleft()
-            if not overwrite:  # jump명령어는 큐의 맨 앞에 넣고, 다시 뽑는 거라 이걸 하면 안 됨.
-                self.last_played = self.now_playing
-                self.now_playing = song
             return song
         elif self.queue and pos == -1:
             song = self.queue.pop()
-            self.last_played = self.now_playing
-            self.now_playing = song
             return song
         elif self.queue:  # 큐에서 삭제용도
             del self.queue[pos]
@@ -68,7 +55,7 @@ class Song:
 
         # 노래 정보
         self.title = self.video_info["title"]
-        self.thumbnail_url = self._set_thumnail_url()
+        self._set_thumnail_url()
         self.duration = self.video_info["duration"]
         self.stopwatch = Stopwatch()
         self.played_time = 0
@@ -83,11 +70,11 @@ class Song:
             self.played_time += part_time
         else:
             self.stopwatch.reset()
-    
-    def jump(self, target_time:int):
+
+    def jump(self, target_time: int):
         self.stopwatch.reset()
         self.played_time = target_time
-    
+
     def time_to_korean(self, time):
         time = round(time)
         hour, minute, second = time // 3600, time // 60 - 60 * (time // 3600), time % 60
@@ -103,10 +90,10 @@ class Song:
         video_id = self.video_info["id"]
         self.thumbnail_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
 
-    def song_info(self):
+    def song_info(self, caller="que"):
         part_time = self.stopwatch.reset()
         self.played_time += part_time
-        
+
         progress = ""
 
         filled_box = math.floor(self.played_time * 20 / self.duration)
@@ -115,16 +102,10 @@ class Song:
         for _ in range(20 - filled_box):
             progress += "─"
 
-        message = f"현재 곡 - 추가자({self.applicant_displayname}) : {self.title}\n링크 : {self.youtube_url}\n\n"
-        message += f"진행도 : {progress}\n **(재생시간 : {self.time_to_korean(self.played_time)} / {self.time_to_korean(self.duration)})**"
+        song_type = "현재" if caller == "que" else "마지막"
+        message = f"{song_type} 곡 - 추가자({self.applicant_displayname}) : {self.title}\n링크 : {self.youtube_url}\n\n"
+        if caller == "que":
+            message +=  f"진행도 : {progress}\n **(재생시간 : {self.time_to_korean(self.played_time)} / {self.time_to_korean(self.duration)})**"
+        else:
+            message += f"(재생시간 : {self.time_to_korean(self.duration)})"
         return message
-
-
-class Stopwatch:
-    def __init__(self):
-        self.start = time.time()
-    
-    def reset(self):
-        record = time.time() - self.start
-        self.start = time.time()
-        return record

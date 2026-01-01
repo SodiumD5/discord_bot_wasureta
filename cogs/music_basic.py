@@ -1,20 +1,15 @@
-from discord.ext import commands, tasks
-from discord.ui import Button, View
-from discord import app_commands
-from collections import deque
+from discord.ext import commands
 from utils.music_controller import music_controller
-import discord, asyncio, yt_dlp, functools, random, data.to_supabase as to_supabase, crolling, logging, time
 from utils.forms import Form
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-
+# 해당 명령어들은 음성채널에 들어가 있지 않으면 못 쓰는 명령어들이다.
 class BasicCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     async def cog_command_error(self, error):  # discord.py 지정 handler
-        logging.error(error)
+        print(error)
 
     async def channel_check(self, ctx):
         author_channel = ctx.author.voice

@@ -1,12 +1,6 @@
 import asyncio
 from collections import deque
-from email.mime import audio
-import functools
-import time
-import discord
-from sympy import EX
-import yt_dlp
-import crolling
+import functools, time, discord, yt_dlp
 from data.guild import Guild, Song
 from utils.forms import Form
 
@@ -64,6 +58,7 @@ class MusicPlayer:
                 song = Song(youtube_url=url, video_info=youtube_info, audio_source=audio_source, applicant=applicant)
 
                 self.guild.add_queue(song)
+                await self.play_next()
 
                 message = f"노래 제목 : {song.title} \n대기열 {insert_pos}번에 추가 되었습니다."
                 return message
@@ -75,7 +70,8 @@ class MusicPlayer:
         if self.guild.is_queue_empty() or self.voice_client.is_playing():
             return
 
-        song_data = self.guild.pop_queue(pos=0, overwrite=overwrite)
+        song_data = self.guild.pop_queue(pos=0)
+        self.guild.now_playing = song_data  # now는 시작전에 설정
 
         def after_playing(error):
             if error:
@@ -83,6 +79,9 @@ class MusicPlayer:
 
             if self.voice_client is None or not self.voice_client.is_connected():
                 return
+
+            if not overwrite:  # jump명령어는 큐의 맨 앞에 넣고, 다시 뽑는 거라 이걸 하면 안 됨.
+                self.guild.last_played = self.guild.now_playing  # last는 플레이 후에 설정
 
             if self.guild.repeat != "반복 안 함":
                 audio_source = discord.FFmpegPCMAudio(self.guild.now_playing.stream_url, **self.FFMPEG_OPTIONS)
@@ -96,7 +95,6 @@ class MusicPlayer:
                 asyncio.run_coroutine_threadsafe(self.play_next(), self.voice_client.loop)
             else:
                 asyncio.run_coroutine_threadsafe(self.voice_client.disconnect(), self.voice_client.loop)
-                music_controller.remove_player(self.guild_id)
 
         await asyncio.sleep(0)
         song_data.start_time = time.time()
@@ -158,11 +156,6 @@ class MusicController:
             self.players[guild_id].voice_client = voice_client
         return self.players[guild_id]
 
-    def remove_player(self, guild_id):
-        """길드 플레이어 제거"""
-        if guild_id in self.players:
-            del self.players[guild_id]
-
     async def play(self, ctx, search):
         """채널연결과 guild의 player로 매칭시켜서 재생"""
         if not ctx.author.voice:
@@ -182,10 +175,8 @@ class MusicController:
                 message = await player.append_queue(search, ctx.author, True)  # 플리일 경우 재생하는거도 포함되있음
                 form = Form(message)
                 await form.smart_send(ctx)
-                await player.play_next()
             else:  # 단곡일 경우
                 message = await player.append_queue(search, ctx.author)
-                await player.play_next()
                 form = Form(message)
                 await form.smart_send(ctx)
         else:  # 검색어일 경우
@@ -197,15 +188,15 @@ class MusicController:
         player = self.get_player(ctx.guild.id, ctx.voice_client)
 
         if player.voice_client and player.voice_client.is_playing():
+            will_disconnect = player.guild.is_queue_empty()
             player.voice_client.stop()
-            # await player.play_next()
-            if player.voice_client:
-                form = Form("다음 노래가 재생됩니다.")
-                await form.smart_send(ctx)
-            else:
+            if will_disconnect:
+                player.voice_client = ctx.voice_client
                 form = Form("모든 노래가 재생되어, 봇이 나갔습니다.")
                 await form.smart_send(ctx)
-                await player.voice_client.disconnect()
+            else:
+                form = Form("다음 노래가 재생됩니다.")
+                await form.smart_send(ctx)
         else:
             form = Form("현재 재생 중이 아니거나, 통화방에 없습니다.")
             await form.smart_send(ctx)
@@ -238,8 +229,8 @@ class MusicController:
             await form.smart_send(ctx)
 
             if is_leave:
-                await player.voice_client.disconnect()
-                self.remove_player(ctx.guild.id)
+                await player.voice_client.stop()
+                player.voice_client = ctx.voice_client
         else:
             if is_leave:
                 message = "이미 연결이 끊어져있습니다."
@@ -296,6 +287,19 @@ class MusicController:
                 await form.smart_send(ctx)
         except Exception as e:
             await self._invalid_input(ctx)
+            print(e)
+
+    async def take_last_played(self, ctx):
+        player = self.get_player(ctx.guild.id, ctx.voice_client)
+
+        try:
+            message = player.guild.last_played.song_info(caller="last-played")
+            form = Form(message=message, title=f"마지막 재생 곡", guild=player.guild, player=player)
+            await form.show_last_played(ctx)
+        except AttributeError:
+            form = Form("서버에서 노래를 재생한 기록이 없습니다.")
+            await form.smart_send(ctx)
+        except Exception as e:
             print(e)
 
 

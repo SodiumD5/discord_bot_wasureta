@@ -1,5 +1,8 @@
 from discord.ui import Button, View
 import discord
+from numpy import insert
+
+from data.guild import Song
 
 
 class Form:
@@ -11,6 +14,11 @@ class Form:
         self.player = player
         self.obj = None
         self.view = None
+
+    async def disable_view(self, view):
+        for item in view.children:
+            item.disabled = True
+        await self.obj.edit(view=view)
 
     async def smart_send(self, ctx, message=None):
         if message != None:
@@ -50,12 +58,7 @@ class Form:
             button.callback = button_callback
             view.add_item(button)
 
-        async def time_out():
-            for item in view.children:
-                item.disabled = True
-            await self.obj.edit(view=view)
-
-        view.on_timeout = time_out
+        view.on_timeout = lambda: self.disable_view(view)
         self.obj = await ctx.send(embed=discord.Embed(title=self.title, description=self.message), view=view)
 
     async def _update_queue_message(self, ctx, interaction, page):
@@ -73,7 +76,7 @@ class Form:
         if self.view:
             self.view.stop()
 
-        view = View(timeout=10)
+        view = View(timeout=30)
         self.view = view
 
         queue_len = self.guild.get_queue_length()
@@ -115,29 +118,17 @@ class Form:
             embed.set_image(url=self.guild.now_playing.thumbnail_url)
             self.obj = await ctx.send(embed=embed, view=view)
 
-        # timeout
-        async def time_out(view):
-            for item in view.children:
-                item.disabled = True
-            await self.obj.edit(view=view)
-
-        view.on_timeout = lambda: time_out(view)
-
+        view.on_timeout = lambda: self.disable_view(view)
         return view
 
     async def show_repeat(self, ctx):
         view = View(timeout=30)
         repeat_options = {"반복 안 함": discord.ButtonStyle.red, "현재 곡 반복": discord.ButtonStyle.green, "전체 반복": discord.ButtonStyle.primary}
 
-        async def disable_view(msg):
-            for item in view.children:
-                item.disabled = True
-            await msg.edit(view=view)
-
         async def repeat_callback(interaction, state):
             self.guild.repeat = state
             await interaction.response.edit_message(embed=discord.Embed(title=f"{ctx.guild.name} 서버 반복 설정", description=f"현재 상태 : {state}"), view=view)
-            await disable_view(message)
+            await self.disable_view(view)
 
         for state, style in repeat_options.items():
             if state != self.guild.repeat:
@@ -149,5 +140,41 @@ class Form:
                 button.callback = button_callback
                 view.add_item(button)
 
-        view.on_timeout = lambda: disable_view(message)
-        message = await ctx.send(embed=discord.Embed(title=f"{ctx.guild.name} 서버 반복 설정", description=f"현재 상태 : {self.guild.repeat}"), view=view)
+        view.on_timeout = lambda: self.disable_view(view)
+        self.obj = await ctx.send(embed=discord.Embed(title=f"{ctx.guild.name} 서버 반복 설정", description=f"현재 상태 : {self.guild.repeat}"), view=view)
+
+    async def show_last_played(self, ctx):
+        view = View(timeout=30)
+
+        insert_button = Button(label=f"추가하기", style=discord.ButtonStyle.green)
+
+        async def insert_button_callback(interaction):
+            await self.disable_view(view)
+        
+            author_channel = ctx.author.voice
+            bot_channel = ctx.guild.me.voice
+
+            # 같은 채널인지 확인
+            if author_channel and bot_channel:
+                if author_channel.channel.id != bot_channel.channel.id:
+                    await interaction.followup.send_message("봇과 같은 채널이 아닙니다.")
+                    return
+            elif not author_channel:
+                await interaction.followup.send_message("먼저 음성 채널에 들어가 주세요.")
+                return
+            else:
+                await ctx.author.voice.channel.connect()
+            
+            await interaction.response.send_message("노래를 추가하는 중...")
+            self.player.voice_client = ctx.voice_client
+            url = self.guild.last_played.youtube_url
+            message = await self.player.append_queue(url, ctx.author)
+            await interaction.edit_original_response(content=message)
+
+        insert_button.callback = insert_button_callback
+        view.add_item(insert_button)
+
+        embed = discord.Embed(title=self.title, description=self.message)
+        embed.set_image(url=self.guild.last_played.thumbnail_url)
+        self.obj = await ctx.send(embed=embed, view=view)
+        view.on_timeout = lambda: self.disable_view(view)

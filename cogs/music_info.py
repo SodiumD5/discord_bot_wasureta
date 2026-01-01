@@ -1,12 +1,10 @@
-from discord.ext import commands, tasks
-from discord.ui import Button, View
+from discord.ext import commands
 from discord import app_commands
-from collections import deque
-import discord, asyncio, yt_dlp, functools, random, data.to_supabase as to_supabase, crolling, logging, time
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+from utils.music_controller import music_controller
 
 
+# 해당 명령어들은 음성채널에 들어가 있지 않아도 쓸 순 있는 명령어이다. 
 class InfoCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -30,6 +28,7 @@ class InfoCommands(commands.Cog):
     @commands.hybrid_command(name="last-played", description="서버에서 가장 마지막으로 틀었던 노래의 제목과 링크를 준다.")
     async def last_played(self, ctx):
         await ctx.defer()
+        await music_controller.take_last_played(ctx)
 
     @commands.hybrid_command(name="playlist", description="해당 유저가 많이 틀었던 노래 플레이리스트를 랜덤으로 뽑아준다.")
     @app_commands.describe(
