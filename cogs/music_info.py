@@ -1,6 +1,5 @@
 from discord.ext import commands
 from discord import app_commands
-
 from utils.music_controller import music_controller
 
 
@@ -32,9 +31,9 @@ class InfoCommands(commands.Cog):
 
     @commands.hybrid_command(name="playlist", description="해당 유저가 많이 틀었던 노래 플레이리스트를 랜덤으로 뽑아준다.")
     @app_commands.describe(
-        user_name="누구의 플리를 찾을 지 입력(비워두면 서버 전체에서 검색한다)",
-        start_num="몇 위부터 검색할 지 입력(비워두면 1위부터 검색한다)",
-        end_num="몇 위까지 검색할 지 입력(비워두면 50위까지 검색한다)",
+        user_name="누구의 플리를 찾을 지 입력 (기본 값 : 서버 전체)",
+        start_num="몇 위부터 검색할 지 입력 (기본 값 : 1)",
+        end_num="몇 위까지 검색할 지 입력 (기본 값 : 50)",
     )
     async def playlist(self, ctx, user_name: str = None, start_num: int = None, end_num: int = None):
         await ctx.defer()

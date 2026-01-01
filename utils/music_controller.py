@@ -1,5 +1,6 @@
 import asyncio
 from collections import deque
+import random
 import functools, time, discord, yt_dlp
 from data.guild import Guild, Song
 from utils.forms import Form
@@ -11,14 +12,14 @@ class MusicPlayer:
         self.guild_id = guild_id
         self.voice_client = voice_client
         self.guild = Guild()
-        self._reset_option()
+        self.reset_option()
 
-    def _reset_option(self):
+    def reset_option(self):
         self.YT_OPTIONS = {"format": "bestaudio/best", "extract_flat": "in_playlist", "ratelimit": "0", "playlistend": 20}
         self.YDL = yt_dlp.YoutubeDL(self.YT_OPTIONS)
-        self.FFMPEG_OPTIONS = {"before_options": "-ss 0 -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5", "options": "-vn -loglevel debug"}
+        self.FFMPEG_OPTIONS = {"before_options": "-ss 0 -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5", "options": "-vn -loglevel debug -af volume=1"}
 
-    async def append_queue(self, url, applicant, is_playlist=False):
+    async def append_queue(self, url, applicant, is_playlist=False, pos=-1):
         """노래의 정보를 추출하고 재생가능한 ffmpeg형태로 만들어서 대기열에 추가"""
         try:
             loop = asyncio.get_event_loop()
@@ -57,9 +58,14 @@ class MusicPlayer:
                 audio_source = discord.FFmpegPCMAudio(stream_url, **self.FFMPEG_OPTIONS)
                 song = Song(youtube_url=url, video_info=youtube_info, audio_source=audio_source, applicant=applicant)
 
-                self.guild.add_queue(song)
+                self.guild.add_queue(data=song, pos=pos)
                 await self.play_next()
-
+                
+                if pos == 0:
+                    insert_pos = 0
+                    if self.voice_client.is_playing():
+                        insert_pos += 1
+                    
                 message = f"노래 제목 : {song.title} \n대기열 {insert_pos}번에 추가 되었습니다."
                 return message
         except Exception as e:
@@ -122,7 +128,7 @@ class MusicPlayer:
         if self.voice_client.is_playing():
             insert_pos += 1
 
-        self._reset_option()
+        self.reset_option()
         return search_output, message, insert_pos
 
     async def seek_to(self, target_time: int):
@@ -131,7 +137,7 @@ class MusicPlayer:
         now_playing = self.guild.now_playing
         audio_source = discord.FFmpegPCMAudio(now_playing.stream_url, **self.FFMPEG_OPTIONS)
         self.guild.now_playing.audio_source = audio_source
-        self._reset_option()
+        self.reset_option()
 
         self.guild.add_queue(data=self.guild.now_playing, pos=0)
         self.voice_client.pause()
@@ -156,18 +162,22 @@ class MusicController:
             self.players[guild_id].voice_client = voice_client
         return self.players[guild_id]
 
-    async def play(self, ctx, search):
-        """채널연결과 guild의 player로 매칭시켜서 재생"""
+    async def _check_voice_channel(self, ctx):
         if not ctx.author.voice:
             form = Form("먼저 음성 채널에 들어가 주세요.")
             await form.smart_send(ctx)
-            return
+            return False
 
         if not ctx.voice_client:
             await ctx.author.voice.channel.connect()
         elif ctx.voice_client.channel != ctx.author.voice.channel:
             await ctx.voice_client.move_to(ctx.author.voice.channel)
+        return True
 
+    async def play(self, ctx, search):
+        """채널연결과 guild의 player로 매칭시켜서 재생"""
+        if not await self._check_voice_channel(ctx):
+            return
         player = self.get_player(ctx.guild.id, ctx.voice_client)
 
         if "https://www.youtube.com/" in search or "https://youtu.be/" in search:  # url일 경우
@@ -301,6 +311,43 @@ class MusicController:
             await form.smart_send(ctx)
         except Exception as e:
             print(e)
+
+    async def wasu(self, ctx, option):
+        if not await self._check_voice_channel(ctx):
+            return
+
+        player = self.get_player(ctx.guild.id, ctx.voice_client)
+        player.FFMPEG_OPTIONS["options"] = "-vn -loglevel debug -af volume=2"  # 볼륨 키우기
+
+        if option == "원곡":
+            original_url = "https://www.youtube.com/watch?v=NaBF7qsPxWg"
+            message = await player.append_queue(url=original_url, applicant=ctx.author, pos=0)
+        elif option == "신원미상 반응":
+            player.FFMPEG_OPTIONS["before_options"] = "-ss 54 -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"  # 54초부터가 반응임
+            swms_url = "https://www.youtube.com/watch?v=Qk1wGwRE2uI"
+            message = await player.append_queue(url=swms_url, applicant=ctx.author, pos=0)
+
+        form = Form(message)
+        await form.smart_send(ctx)
+        player.reset_option()
+
+    async def swms(self, ctx):
+        if not await self._check_voice_channel(ctx):
+            return
+
+        swms_playlist = "https://www.youtube.com/playlist?list=UUhoPhrRvzjAz_qagqCJAAJA"
+        player = self.get_player(ctx.guild.id, ctx.voice_client)
+        player.FFMPEG_OPTIONS["options"] = "-vn -loglevel debug -af volume=2"  # 볼륨 키우기
+
+        loop = asyncio.get_event_loop()
+        youtube_info = await loop.run_in_executor(None, functools.partial(player.YDL.extract_info, swms_playlist, download=False))
+        data_entries = youtube_info["entries"]
+        picked_url = random.choice(data_entries)
+
+        message = await player.append_queue(picked_url["url"], ctx.author)
+        form = Form(message)
+        await form.smart_send(ctx)
+        player.reset_option()
 
 
 music_controller = MusicController()
