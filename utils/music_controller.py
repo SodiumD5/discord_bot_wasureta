@@ -60,12 +60,12 @@ class MusicPlayer:
 
                 self.guild.add_queue(data=song, pos=pos)
                 await self.play_next()
-                
+
                 if pos == 0:
                     insert_pos = 0
                     if self.voice_client.is_playing():
                         insert_pos += 1
-                    
+
                 message = f"노래 제목 : {song.title} \n대기열 {insert_pos}번에 추가 되었습니다."
                 return message
         except Exception as e:
@@ -297,19 +297,6 @@ class MusicController:
                 await form.smart_send(ctx)
         except Exception as e:
             await self._invalid_input(ctx)
-            print(e)
-
-    async def take_last_played(self, ctx):
-        player = self.get_player(ctx.guild.id, ctx.voice_client)
-
-        try:
-            message = player.guild.last_played.song_info(caller="last-played")
-            form = Form(message=message, title=f"마지막 재생 곡", guild=player.guild, player=player)
-            await form.show_last_played(ctx)
-        except AttributeError:
-            form = Form("서버에서 노래를 재생한 기록이 없습니다.")
-            await form.smart_send(ctx)
-        except Exception as e:
             print(e)
 
     async def wasu(self, ctx, option):

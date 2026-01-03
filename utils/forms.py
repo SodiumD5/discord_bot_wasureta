@@ -1,12 +1,11 @@
 from discord.ui import Button, View
 import discord
-from numpy import insert
 
 from data.guild import Song
 
 
 class Form:
-    def __init__(self, message, data=[], title=None, guild=None, player=None):
+    def __init__(self, message="", data=[], title=None, guild=None, player=None):
         self.data = [None] + data  # 인덱스 맞춰줌 (guild.queue객체 리스트가 들어옴)
         self.title = title
         self.message = message
@@ -19,6 +18,12 @@ class Form:
         for item in view.children:
             item.disabled = True
         await self.obj.edit(view=view)
+
+    async def _is_interaction_user(self, ctx, interaction):
+        if ctx.author.name != interaction.user.name:
+            await interaction.response.send_message(f"{interaction.user.mention} 다른 유저의 명령어를 뺏지 마세요.")
+            return False
+        return True
 
     async def smart_send(self, ctx, message=None):
         if message != None:
@@ -39,11 +44,14 @@ class Form:
 
             async def button_callback(interaction, button_index=i):
                 # 한 번만 클릭되게
+                if not await self._is_interaction_user(ctx=ctx, interaction=interaction):
+                    return
+
                 for item in view.children:
                     item.disabled = True
                 await self.obj.edit(view=view)
 
-                await interaction.response.send_message(f"{button_index}번 노래가 선택되었습니다.")
+                await interaction.response.send_message(f"{button_index}번 노래를 추가하는 중...")
                 title = self.data[button_index]["title"]
                 url = self.data[button_index]["url"]
 
@@ -52,8 +60,8 @@ class Form:
                 if not self.player.voice_client.is_playing():
                     await self.player.play_next()
 
-                self.message = f"노래 제목 : {title} \n대기열 {insert_pos}번에 추가 되었습니다."
-                await self.smart_send(ctx)
+                message = f"노래 제목 : {title} \n대기열 {insert_pos}번에 추가 되었습니다."
+                await interaction.edit_original_response(content=message)
 
             button.callback = button_callback
             view.add_item(button)
@@ -87,8 +95,11 @@ class Form:
             remove_button = Button(label=f"{button_idx}번 제거하기", style=discord.ButtonStyle.red)
 
             async def remove_button_callback(interaction, page=page, idx=button_idx):
+                if not await self._is_interaction_user(ctx=ctx, interaction=interaction):
+                    return
+
                 self.guild.pop_queue(pos=idx - 1)
-                await self.smart_send(ctx, f"{interaction.user.name}가 {idx}번을 제거했습니다.")
+                await self.smart_send(ctx, f"{interaction.user.display_name}가 {idx}번을 제거했습니다.")
                 await self._update_queue_message(ctx, interaction, page)
 
             remove_button.callback = remove_button_callback
@@ -99,9 +110,13 @@ class Form:
         after_button = Button(label="다음 페이지", style=discord.ButtonStyle.green)
 
         async def before_button_callback(interaction, page=page):
+            if not await self._is_interaction_user(ctx=ctx, interaction=interaction):
+                return
             await self._update_queue_message(ctx, interaction, page - 1)
 
         async def after_button_callback(interaction, page=page):
+            if not await self._is_interaction_user(ctx=ctx, interaction=interaction):
+                return
             await self._update_queue_message(ctx, interaction, page + 1)
 
         before_button.callback = before_button_callback
@@ -126,8 +141,11 @@ class Form:
         repeat_options = {"반복 안 함": discord.ButtonStyle.red, "현재 곡 반복": discord.ButtonStyle.green, "전체 반복": discord.ButtonStyle.primary}
 
         async def repeat_callback(interaction, state):
+            if not await self._is_interaction_user(ctx=ctx, interaction=interaction):
+                return
             self.guild.repeat = state
             await interaction.response.edit_message(embed=discord.Embed(title=f"{ctx.guild.name} 서버 반복 설정", description=f"현재 상태 : {state}"), view=view)
+            await interaction.followup.send("설정 되었습니다.")
             await self.disable_view(view)
 
         for state, style in repeat_options.items():
@@ -150,7 +168,7 @@ class Form:
 
         async def insert_button_callback(interaction):
             await self.disable_view(view)
-        
+
             author_channel = ctx.author.voice
             bot_channel = ctx.guild.me.voice
 
@@ -164,7 +182,10 @@ class Form:
                 return
             else:
                 await ctx.author.voice.channel.connect()
-            
+
+            if not await self._is_interaction_user(ctx=ctx, interaction=interaction):
+                return
+
             await interaction.response.send_message("노래를 추가하는 중...")
             self.player.voice_client = ctx.voice_client
             url = self.guild.last_played.youtube_url
@@ -178,3 +199,37 @@ class Form:
         embed.set_image(url=self.guild.last_played.thumbnail_url)
         self.obj = await ctx.send(embed=embed, view=view)
         view.on_timeout = lambda: self.disable_view(view)
+
+    async def helper(self, ctx):
+        view = View()
+
+        self.title = "Wasureta 설명서"
+        self.message += "### 기본 명령어\n"
+        self.message += "**`/play`**\n 유튜브 링크(플리도 가능), 검색어를 통해서 노래를 추가한다.\n"
+        self.message += "**`/skip`**\n 현재 재생 중인 음악을 스킵한다.\n"
+        self.message += "**`/pause`**\n 재생을 일시정지/재시작한다.\n"
+        self.message += "**`/leave`**\n 봇을 내보낸다.\n"
+        self.message += "**`/refresh-que`**\n 대기열의 모든 음악을 삭제한다.\n"
+        self.message += "**`/que`**\n 현재 재생 중인 노래와 대기열의 상태를 보여주고, 음악을 삭제할 수 있다.\n"
+        self.message += "**`/repeat`**\n 반복 재생 모드를 전환할 수 있다.\n"
+        self.message += "**`/jump`** `HH:MM:SS`\n 재생 중인 곡의 특정 시간으로 이동합니다.\n(예: `/jump 12:34` → 12분 34초로 이동)\n"
+        self.message += "\n"
+
+        self.message += "### 통계 명령어\n"
+        self.message += "**`/last-played`**\n 서버에서 가장 마지막으로 틀었던 노래의 정보를 제공한다.\n"
+        self.message += "**`/ranking`**\n \n"
+        self.message += "**`/search-server-top10`**\n \n"
+        self.message += "**`/search-user-top10`**\n \n"
+        self.message += "**`/how-many-played`**\n \n"
+        self.message += "**`/playlist`**\n \n"
+
+        self.message += "### 시그니처 명령어\n"
+        self.message += "**`/wasu`**\n wasureta원곡 또는 리엑션을 들을 수 있다.\n"
+        self.message += "**`/swms`**\n 신원미상의 유튜브 영상 중 랜덤영상을 들려준다.\n"
+
+        self.message += "### 부가 명령어\n"
+        self.message += "**`/---`**\n 선을 그린다.\n"
+        self.message += "**`/ping`**\n ping을 날린다.\n"
+
+        embed = discord.Embed(title=self.title, description=self.message)
+        self.obj = await ctx.send(embed=embed, view=view)

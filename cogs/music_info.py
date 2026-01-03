@@ -1,13 +1,25 @@
 from discord.ext import commands
 from discord import app_commands
-from utils.music_controller import music_controller
+from utils.forms import Form
+from utils.info_controller import info_controller
 
 
 # 해당 명령어들은 음성채널에 들어가 있지 않아도 쓸 순 있는 명령어이다. 
 class InfoCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
+        
+    @commands.hybrid_command(name="help", description="wasureta의 명령어를 사용법을 설명해준다.")
+    async def help(self, ctx):
+        await ctx.defer()
+        form = Form()
+        await form.helper(ctx)
+    
+    @commands.hybrid_command(name="last-played", description="서버에서 가장 마지막으로 틀었던 노래의 제목과 링크를 준다.")
+    async def last_played(self, ctx):
+        await ctx.defer()
+        await info_controller.take_last_played(ctx)
+    
     @commands.hybrid_command(name="ranking", description="서버에서 각 멤버가 몇 번씩 재생하였는 지 순위를 알려준다.")
     async def ranking(self, ctx):
         await ctx.defer()
@@ -23,11 +35,6 @@ class InfoCommands(commands.Cog):
     @commands.hybrid_command(name="how-many-played", description="노래 제목을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다.")
     async def how_many_played(self, ctx, title: str):
         await ctx.defer()
-
-    @commands.hybrid_command(name="last-played", description="서버에서 가장 마지막으로 틀었던 노래의 제목과 링크를 준다.")
-    async def last_played(self, ctx):
-        await ctx.defer()
-        await music_controller.take_last_played(ctx)
 
     @commands.hybrid_command(name="playlist", description="해당 유저가 많이 틀었던 노래 플레이리스트를 랜덤으로 뽑아준다.")
     @app_commands.describe(

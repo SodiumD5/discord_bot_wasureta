@@ -47,7 +47,7 @@ class BasicCommands(commands.Cog):
         if await self.channel_check(ctx):
             await music_controller.refresh_que(ctx, is_leave=True)
 
-    @commands.hybrid_command(name="refresh-que", description="que의 모든 노래를 삭제합니다.")
+    @commands.hybrid_command(name="refresh-que", description="대기열의 모든 노래를 삭제합니다.")
     async def refresh_que(self, ctx):
         await ctx.defer()
         if await self.channel_check(ctx):
