@@ -87,7 +87,8 @@ class MusicPlayer:
                 return
 
             if not overwrite:  # jump명령어는 큐의 맨 앞에 넣고, 다시 뽑는 거라 이걸 하면 안 됨.
-                self.guild.last_played = self.guild.now_playing  # last는 플레이 후에 설정
+                # last_play에 있는 song객체는 last-played명령어를 호출 할 때만 DB에서 업뎃해주면 됨. 
+                database_insert.update_server_last_play(self.guild)
 
             if self.guild.repeat != "반복 안 함":
                 audio_source = discord.FFmpegPCMAudio(self.guild.now_playing.stream_url, **self.FFMPEG_OPTIONS)
@@ -105,6 +106,7 @@ class MusicPlayer:
         await asyncio.sleep(0)
         song_data.start_time = time.time()
         self.voice_client.play(song_data.audio_source, after=after_playing)
+        self.guild.now_playing.start_time = time.time()
         database_insert.record_music_played(self.guild)
 
     async def keyword_search_youtube(self, query, max_results=5):

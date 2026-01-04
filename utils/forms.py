@@ -13,7 +13,7 @@ class Form:
         self.player = player
         self.obj = None
         self.view = None
-        self.color = 0x00ff00
+        self.color = 0x00FF00
 
     async def disable_view(self, view):
         for item in view.children:
@@ -201,6 +201,11 @@ class Form:
         self.obj = await ctx.send(embed=embed, view=view)
         view.on_timeout = lambda: self.disable_view(view)
 
+    async def basic_view(self, ctx):
+        view = View()
+        embed = discord.Embed(title=self.title, description=self.message, color=self.color)
+        self.obj = await ctx.send(embed=embed, view=view)
+
     async def helper(self, ctx):
         view = View()
 
@@ -218,10 +223,9 @@ class Form:
 
         self.message += "### 📊 통계 명령어\n"
         self.message += "**`/last-played`**\n 서버에서 가장 마지막으로 들었던 노래의 정보를 제공한다.\n"
-        self.message += "**`/ranking` `(신청곡 수 순) / (감상 시간 순)`**\n 서버에서 멤버들의 신청곡 수 또는 음악감상 시간 순위를 제공한다.\n"
-        self.message += "**`/search-server-top10`**\n 서버에서 가장 많이 재생된 노래 순위를 제공한다.\n"
-        self.message += "**`/search-user-top10` `유저이름`**\n 서버에서 해당 유저가 가장 많이 재생한 노래 순위를 제공한다.\n"
-        self.message += "**`/playlist` `유저이름(기본값:서버전체)` `검색 마지막 순위(기본값:50)`**\n 서버에서 재생된 노래를 바탕으로 랜덤 플레이리스트를 만들어준다.\n"
+        self.message += "**`/ranking` `(신청곡 수 순위) / (청취 시간 순위)`**\n 서버에서 멤버들의 신청곡 수 또는 청취 시간 순위를 제공한다.\n"
+        self.message += "**`/search-user-top10` `멤버이름(기본값:서버전체)`**\n 한 멤버(미입력시:서버전체)가 많이 재생된 노래의 순위를 제공한다.\n"
+        self.message += "**`/playlist` `멤버이름(기본값:서버전체)` `검색 마지막 순위(기본값:50)`**\n 서버에서 재생된 노래를 바탕으로 랜덤 플레이리스트를 만들어준다.\n"
         self.message += "\n"
 
         self.message += "### 📝 시그니처 명령어\n"

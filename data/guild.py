@@ -7,8 +7,8 @@ from utils.stopwatch import Stopwatch
 # 이 파일에서는 하나의 guild 내 에서의 정보만을 생각한다.
 class Guild:
     def __init__(self, guild):
-        self.guild_id = guild.id
-        self.guild_name = guild.name
+        self.id = guild.id
+        self.name = guild.name
         self.queue = deque()
         self.now_playing = None
         self.last_played = None
@@ -48,12 +48,13 @@ class Guild:
 
 
 class Song:
-    def __init__(self, youtube_url, video_info, audio_source, applicant):
+    def __init__(self, applicant, youtube_url, video_info, audio_source = None):
         # 스트림 정보
         self.youtube_url = youtube_url
         self.video_info = video_info
         self.stream_url = self.video_info["url"]
         self.audio_source = audio_source
+        self.video_id = self.video_info["id"]
 
         # 노래 정보
         self.title = self.video_info["title"]
@@ -61,6 +62,7 @@ class Song:
         self.duration = self.video_info["duration"]
         self.stopwatch = Stopwatch()
         self.played_time = 0
+        self.start_time = None
 
         # 신청자 정보
         self.applicant_name = applicant.name
@@ -89,8 +91,7 @@ class Song:
             return f"{hour}시간 {minute}분 {second}초"
 
     def _set_thumnail_url(self):
-        video_id = self.video_info["id"]
-        self.thumbnail_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+        self.thumbnail_url = f"https://img.youtube.com/vi/{self.video_id}/hqdefault.jpg"
 
     def song_info(self, caller="que"):
         part_time = self.stopwatch.reset()
@@ -109,5 +110,6 @@ class Song:
         if caller == "que":
             message +=  f"진행도 : {progress}\n **(재생시간 : {self.time_to_korean(self.played_time)} / {self.time_to_korean(self.duration)})**"
         else:
-            message += f"(재생시간 : {self.time_to_korean(self.duration)})"
+            message += f"(재생시간 : {self.time_to_korean(self.duration)})\n"
+            message += f"마지막으로 재생한 시간 : {self.start_time}"
         return message
