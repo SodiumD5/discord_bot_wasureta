@@ -37,7 +37,7 @@ class DatabaseSearch(DatabaseInit):
         finally:
             cursor.close()
 
-    def get_top_players(self, server_id: int, limit: int = 10):
+    def get_top_users(self, server_id: int, limit: int = 10):
         if not self.connection:
             return None
 
@@ -63,6 +63,68 @@ class DatabaseSearch(DatabaseInit):
             return results
         except Exception as e:
             print(f"get_top_players 오류: {e}")
+            return None
+        finally:
+            cursor.close()
+
+    def get_top_songs(self, server_id: int, limit: int = 10):
+        if not self.connection:
+            return None
+
+        cursor = self.connection.cursor(dictionary=True)
+        try:
+            query = """
+                SELECT 
+                    s.id,
+                    s.youtube_url AS url,
+                    s.title,
+                    s.duration,
+                    COUNT(ph.id) AS play_count
+                FROM PlayHistory ph
+                JOIN Songs s ON ph.song_id = s.id
+                WHERE ph.server_id = %s
+                GROUP BY s.id, s.youtube_url, s.title, s.duration
+                ORDER BY play_count DESC
+                LIMIT %s
+                """
+            cursor.execute(query, (server_id, limit))
+            results = cursor.fetchall()
+            self.connection.commit()
+            return results
+        except Exception as e:
+            print(f"get_top_songs 오류 : {e}")
+            return None
+        finally:
+            cursor.close()
+
+    def get_top_songs_by_user(self, server_id: int, display_name: str, limit: int = 10):
+        if not self.connection:
+            return None
+
+        cursor = self.connection.cursor(dictionary=True)
+        try:
+            query = """
+                SELECT 
+                    s.id,
+                    s.youtube_url AS url,
+                    s.title,
+                    s.duration,
+                    COUNT(ph.id) AS play_count
+                FROM PlayHistory ph
+                JOIN Songs s ON ph.song_id = s.id
+                JOIN ServerMembers sm ON ph.server_id = sm.server_id 
+                                        AND ph.user_name = sm.user_name
+                WHERE ph.server_id = %s AND sm.display_name = %s
+                GROUP BY s.id, s.youtube_url, s.title, s.duration
+                ORDER BY play_count DESC
+                LIMIT %s
+                """
+            cursor.execute(query, (server_id, display_name, limit))
+            results = cursor.fetchall()
+            self.connection.commit()
+            return results
+        except Exception as e:
+            print(f"get_top_songs_by_user 오류 : {e}")
             return None
         finally:
             cursor.close()

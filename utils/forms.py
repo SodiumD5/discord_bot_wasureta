@@ -1,7 +1,6 @@
 from discord.ui import Button, View
 import discord
-
-from data.guild import Song
+from utils.state_checker import state_checker
 
 
 class Form:
@@ -14,59 +13,43 @@ class Form:
         self.obj = None
         self.view = None
         self.color = 0x00FF00
+        self.timeout = 30
 
     async def disable_view(self, view):
         for item in view.children:
             item.disabled = True
         await self.obj.edit(view=view)
 
-    async def _is_interaction_user(self, ctx, interaction):
-        if ctx.author.name != interaction.user.name:
-            await interaction.response.send_message(f"{interaction.user.mention} 다른 유저의 명령어를 뺏지 마세요.")
-            return False
-        return True
-
-    async def smart_send(self, ctx, message=None):
-        if message != None:
-            send_message = message
-        else:
-            send_message = self.message
-
-        if ctx.interaction:
-            await ctx.interaction.followup.send(send_message)
-        else:
-            await ctx.send(send_message, reference=ctx.message)
-
-    async def show5_music(self, ctx, insert_pos):
-        view = View(timeout=20)
-
-        for i in range(1, len(self.data)):
+    async def _insert_song_button(self, ctx, view, number_of_button):
+        for i in range(1, number_of_button):
             button = Button(label=f"{i}번 재생", style=discord.ButtonStyle.green)
 
             async def button_callback(interaction, button_index=i):
-                # 한 번만 클릭되게
-                if not await self._is_interaction_user(ctx=ctx, interaction=interaction):
+                if not await state_checker.command(ctx, interaction, type="play"):
                     return
-
-                for item in view.children:
-                    item.disabled = True
-                await self.obj.edit(view=view)
+                await self.disable_view(view)
 
                 await interaction.response.send_message(f"{button_index}번 노래를 추가하는 중...")
-                title = self.data[button_index]["title"]
                 url = self.data[button_index]["url"]
 
-                await self.player.append_queue(url, ctx.author)
+                if not self.player:
+                    from utils.music_controller import music_controller
+
+                    self.player = music_controller.get_player(ctx.guild, ctx.voice_client)
+                message = await self.player.append_queue(url, ctx.author)
+                print(message)
 
                 if not self.player.voice_client.is_playing():
                     await self.player.play_next()
-
-                message = f"노래 제목 : {title} \n대기열 {insert_pos}번에 추가 되었습니다."
                 await interaction.edit_original_response(content=message)
 
             button.callback = button_callback
             view.add_item(button)
+        return view
 
+    async def show_list_view(self, ctx, number_of_button):
+        view = View(timeout=self.timeout)
+        view = await self._insert_song_button(ctx=ctx, view=view, number_of_button=number_of_button)
         view.on_timeout = lambda: self.disable_view(view)
         self.obj = await ctx.send(embed=discord.Embed(title=self.title, description=self.message, color=self.color), view=view)
 
@@ -85,7 +68,7 @@ class Form:
         if self.view:
             self.view.stop()
 
-        view = View(timeout=30)
+        view = View(timeout=self.timeout)
         self.view = view
 
         queue_len = self.guild.get_queue_length()
@@ -96,7 +79,7 @@ class Form:
             remove_button = Button(label=f"{button_idx}번 제거하기", style=discord.ButtonStyle.red)
 
             async def remove_button_callback(interaction, page=page, idx=button_idx):
-                if not await self._is_interaction_user(ctx=ctx, interaction=interaction):
+                if not await state_checker.command(ctx, interaction, type="control"):
                     return
 
                 self.guild.pop_queue(pos=idx - 1)
@@ -111,12 +94,12 @@ class Form:
         after_button = Button(label="다음 페이지", style=discord.ButtonStyle.green)
 
         async def before_button_callback(interaction, page=page):
-            if not await self._is_interaction_user(ctx=ctx, interaction=interaction):
+            if not await state_checker.command(ctx, interaction, type="control"):
                 return
             await self._update_queue_message(ctx, interaction, page - 1)
 
         async def after_button_callback(interaction, page=page):
-            if not await self._is_interaction_user(ctx=ctx, interaction=interaction):
+            if not await state_checker.command(ctx, interaction, type="control"):
                 return
             await self._update_queue_message(ctx, interaction, page + 1)
 
@@ -137,55 +120,15 @@ class Form:
         view.on_timeout = lambda: self.disable_view(view)
         return view
 
-    async def show_repeat(self, ctx):
-        view = View(timeout=30)
-        repeat_options = {"반복 안 함": discord.ButtonStyle.red, "현재 곡 반복": discord.ButtonStyle.green, "전체 반복": discord.ButtonStyle.primary}
-
-        async def repeat_callback(interaction, state):
-            if not await self._is_interaction_user(ctx=ctx, interaction=interaction):
-                return
-            self.guild.repeat = state
-            await interaction.response.edit_message(embed=discord.Embed(title=f"{ctx.guild.name} 서버 반복 설정", description=f"현재 상태 : {state}", color=self.color), view=view)
-            await interaction.followup.send("설정 되었습니다.")
-            await self.disable_view(view)
-
-        for state, style in repeat_options.items():
-            if state != self.guild.repeat:
-                button = Button(label=state, style=style)
-
-                async def button_callback(inter, state=state):
-                    await repeat_callback(inter, state)
-
-                button.callback = button_callback
-                view.add_item(button)
-
-        view.on_timeout = lambda: self.disable_view(view)
-        self.obj = await ctx.send(embed=discord.Embed(title=f"{ctx.guild.name} 서버 반복 설정", description=f"현재 상태 : {self.guild.repeat}", color=self.color), view=view)
-
     async def show_last_played(self, ctx):
-        view = View(timeout=30)
+        view = View(timeout=self.timeout)
 
         insert_button = Button(label=f"추가하기", style=discord.ButtonStyle.green)
 
         async def insert_button_callback(interaction):
+            if not await state_checker.command(ctx, interaction, type="play"):
+                return
             await self.disable_view(view)
-
-            author_channel = ctx.author.voice
-            bot_channel = ctx.guild.me.voice
-
-            # 같은 채널인지 확인
-            if author_channel and bot_channel:
-                if author_channel.channel.id != bot_channel.channel.id:
-                    await interaction.followup.send_message("봇과 같은 채널이 아닙니다.")
-                    return
-            elif not author_channel:
-                await interaction.followup.send_message("먼저 음성 채널에 들어가 주세요.")
-                return
-            else:
-                await ctx.author.voice.channel.connect()
-
-            if not await self._is_interaction_user(ctx=ctx, interaction=interaction):
-                return
 
             await interaction.response.send_message("노래를 추가하는 중...")
             self.player.voice_client = ctx.voice_client
@@ -200,6 +143,17 @@ class Form:
         embed.set_image(url=self.guild.last_played.thumbnail_url)
         self.obj = await ctx.send(embed=embed, view=view)
         view.on_timeout = lambda: self.disable_view(view)
+
+    async def smart_send(self, ctx, message=None):
+        if message != None:
+            send_message = message
+        else:
+            send_message = self.message
+
+        if ctx.interaction:
+            await ctx.interaction.followup.send(send_message)
+        else:
+            await ctx.send(send_message, reference=ctx.message)
 
     async def basic_view(self, ctx):
         view = View()
@@ -224,8 +178,8 @@ class Form:
         self.message += "### 📊 통계 명령어\n"
         self.message += "**`/last-played`**\n 서버에서 가장 마지막으로 들었던 노래의 정보를 제공한다.\n"
         self.message += "**`/ranking` `(신청곡 수 순위) / (청취 시간 순위)`**\n 서버에서 멤버들의 신청곡 수 또는 청취 시간 순위를 제공한다.\n"
-        self.message += "**`/search-user-top10` `멤버이름(기본값:서버전체)`**\n 한 멤버(미입력시:서버전체)가 많이 재생된 노래의 순위를 제공한다.\n"
-        self.message += "**`/playlist` `멤버이름(기본값:서버전체)` `검색 마지막 순위(기본값:50)`**\n 서버에서 재생된 노래를 바탕으로 랜덤 플레이리스트를 만들어준다.\n"
+        self.message += "**`/search-top10` `멤버이름(기본값:서버전체)`**\n 한 멤버(미입력시:서버전체)가 많이 재생된 노래의 순위를 제공한다.\n(단, 멤버이름은 서버별 이름이다.)\n"
+        self.message += "**`/playlist` `멤버이름(기본값:서버전체)` `검색 마지막 순위(기본값:100)`**\n 서버에서 재생된 노래를 바탕으로 랜덤 플레이리스트를 만들어준다.\n(단, 멤버이름은 서버별 이름이다.)\n"
         self.message += "\n"
 
         self.message += "### 📝 시그니처 명령어\n"

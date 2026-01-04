@@ -1,3 +1,4 @@
+import random
 from data.guild import Song
 from data.user import User
 from utils.forms import Form
@@ -31,16 +32,56 @@ class InfoController:
 
     async def take_ranking(self, ctx, order_by):
         if order_by == "신청곡 수 순위":
-            results = database_search.get_top_players(server_id=ctx.guild.id)
+            results = database_search.get_top_users(server_id=ctx.guild.id)
             title = f"{ctx.guild.name} 서버 신청곡 수 순위"
             message = ""
             for idx, result in enumerate(results):
-                message += f"{idx+1}위. {result['display_name']} : `{result['play_count']}`\n\n"
+                message += f"**{idx+1}위. {result['display_name']} : {result['play_count']}번 재생됨**\n\n"
             form = Form(message=message, title=title)
             await form.basic_view(ctx)
         elif order_by == "청취 시간 순위":
             form = Form(message="아몰랑~", title="아직 안 만듬")
             await form.basic_view(ctx)
+
+    def _format_song_message(self, results, ranking_count=True):
+        message = ""
+        for idx, result in enumerate(results):
+            if ranking_count:
+                message += f"**{idx+1}위.** {result['title']}\n**{result['play_count']}번 재생됨**\n\n"
+            else:
+                message += f"**{idx+1}.** {result['title']}\n\n"
+        return message
+
+    def _get_empty_message(self, member_name, guild_name):
+        if member_name is None:
+            return f"{guild_name}서버의 재생 기록이 없습니다."
+        else:
+            return f"{member_name}님은 아직 노래를 재생하지 않았습니다."
+
+    async def _send_song_list(self, ctx, member_name, title_suffix, ranking_count=True, limit=10, randomize=False):
+        if member_name is None:
+            results = database_search.get_top_songs(server_id=ctx.guild.id, limit=limit)
+            title = f"{ctx.guild.name} 서버 {title_suffix}"
+        else:
+            results = database_search.get_top_songs_by_user(server_id=ctx.guild.id, display_name=member_name, limit=limit)
+            title = f"{member_name}의 {title_suffix}"
+
+        if randomize and results:
+            sample_size = min(10, len(results))
+            results = random.sample(results, sample_size)
+
+        message = self._format_song_message(results, ranking_count)
+        if not message:
+            message = self._get_empty_message(member_name, ctx.guild.name)
+
+        form = Form(message=message, title=title, data=results)
+        await form.show_list_view(ctx=ctx, number_of_button=len(results)+1)
+
+    async def take_top_songs(self, ctx, member_name):
+        await self._send_song_list(ctx=ctx, member_name=member_name, title_suffix="인기 노래 차트", ranking_count=True)
+
+    async def make_playlist(self, ctx, member_name, limit):
+        await self._send_song_list(ctx=ctx, member_name=member_name, title_suffix="랜덤 플리", ranking_count=False, limit=limit, randomize=True)
 
 
 info_controller = InfoController()

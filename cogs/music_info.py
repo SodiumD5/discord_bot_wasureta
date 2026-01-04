@@ -24,20 +24,21 @@ class InfoCommands(commands.Cog):
     @commands.hybrid_command(name="ranking", description="서버에서 각 멤버가 몇 번씩 재생하였는 지 순위를 알려준다.")
     async def ranking(self, ctx, 정렬기준: Literal["신청곡 수 순위", "청취 시간 순위"]):
         await ctx.defer()
-        await info_controller.take_ranking(ctx, 정렬기준)
+        await info_controller.take_ranking(ctx=ctx, order_by=정렬기준)
 
-    @commands.hybrid_command(name="search-user-top10", description="한 멤버(혹은 서버)가 많이 재생한 노래의 순위를 알려준다.")
-    async def find_user(self, ctx, user_name: str = None):
+    @commands.hybrid_command(name="search-top10", description="한 멤버(혹은 서버)가 많이 재생한 노래의 순위를 알려준다.")
+    async def find_user(self, ctx, 멤버이름: str = None):
         await ctx.defer()
+        await info_controller.take_top_songs(ctx=ctx, member_name=멤버이름)
 
     @commands.hybrid_command(name="playlist", description="해당 멤버가 많이 틀었던 노래 플레이리스트를 랜덤으로 뽑아준다.")
     @app_commands.describe(
-        user_name="누구의 플리를 찾을 지 입력 (기본 값 : 서버 전체)",
-        start_num="몇 위부터 검색할 지 입력 (기본 값 : 1)",
-        end_num="몇 위까지 검색할 지 입력 (기본 값 : 50)",
+        멤버이름="누구의 플리를 찾을 지 입력 (기본 값 : 서버 전체)",
+        마지막순위="검색할 마지막 순위를 입력 (기본 값 : 100)",
     )
-    async def playlist(self, ctx, user_name: str = None, start_num: int = None, end_num: int = None):
+    async def playlist(self, ctx, 멤버이름: str = None, 마지막순위: int = 100):
         await ctx.defer()
+        await info_controller.make_playlist(ctx=ctx, member_name=멤버이름, limit=마지막순위)
 
 
 async def setup(bot):
