@@ -6,7 +6,9 @@ from utils.stopwatch import Stopwatch
 # discord.py에서는 서버를 guild라는 표현으로 쓴다. 모든 서버에 대한 의미는 guild라는 단어로 통일한다.
 # 이 파일에서는 하나의 guild 내 에서의 정보만을 생각한다.
 class Guild:
-    def __init__(self):
+    def __init__(self, guild):
+        self.guild_id = guild.id
+        self.guild_name = guild.name
         self.queue = deque()
         self.now_playing = None
         self.last_played = None

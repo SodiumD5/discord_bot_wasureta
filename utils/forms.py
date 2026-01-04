@@ -13,6 +13,7 @@ class Form:
         self.player = player
         self.obj = None
         self.view = None
+        self.color = 0x00ff00
 
     async def disable_view(self, view):
         for item in view.children:
@@ -67,7 +68,7 @@ class Form:
             view.add_item(button)
 
         view.on_timeout = lambda: self.disable_view(view)
-        self.obj = await ctx.send(embed=discord.Embed(title=self.title, description=self.message), view=view)
+        self.obj = await ctx.send(embed=discord.Embed(title=self.title, description=self.message, color=self.color), view=view)
 
     async def _update_queue_message(self, ctx, interaction, page):
         queue_len = self.guild.get_queue_length()
@@ -76,7 +77,7 @@ class Form:
         self.title = f"대기열 총 {queue_len}곡"
         new_view = await self.show_queue(ctx, page)
         await interaction.response.edit_message(
-            embed=discord.Embed(title=self.title, description=self.guild.get_queue_info(page, max_result)),
+            embed=discord.Embed(title=self.title, description=self.guild.get_queue_info(page, max_result), color=self.color),
             view=new_view,
         )
 
@@ -129,7 +130,7 @@ class Form:
 
         if not self.obj:
             self.message = self.guild.get_queue_info(page, max_result) + self.message
-            embed = discord.Embed(title=self.title, description=self.message)
+            embed = discord.Embed(title=self.title, description=self.message, color=self.color)
             embed.set_image(url=self.guild.now_playing.thumbnail_url)
             self.obj = await ctx.send(embed=embed, view=view)
 
@@ -144,7 +145,7 @@ class Form:
             if not await self._is_interaction_user(ctx=ctx, interaction=interaction):
                 return
             self.guild.repeat = state
-            await interaction.response.edit_message(embed=discord.Embed(title=f"{ctx.guild.name} 서버 반복 설정", description=f"현재 상태 : {state}"), view=view)
+            await interaction.response.edit_message(embed=discord.Embed(title=f"{ctx.guild.name} 서버 반복 설정", description=f"현재 상태 : {state}", color=self.color), view=view)
             await interaction.followup.send("설정 되었습니다.")
             await self.disable_view(view)
 
@@ -159,7 +160,7 @@ class Form:
                 view.add_item(button)
 
         view.on_timeout = lambda: self.disable_view(view)
-        self.obj = await ctx.send(embed=discord.Embed(title=f"{ctx.guild.name} 서버 반복 설정", description=f"현재 상태 : {self.guild.repeat}"), view=view)
+        self.obj = await ctx.send(embed=discord.Embed(title=f"{ctx.guild.name} 서버 반복 설정", description=f"현재 상태 : {self.guild.repeat}", color=self.color), view=view)
 
     async def show_last_played(self, ctx):
         view = View(timeout=30)
@@ -195,7 +196,7 @@ class Form:
         insert_button.callback = insert_button_callback
         view.add_item(insert_button)
 
-        embed = discord.Embed(title=self.title, description=self.message)
+        embed = discord.Embed(title=self.title, description=self.message, color=self.color)
         embed.set_image(url=self.guild.last_played.thumbnail_url)
         self.obj = await ctx.send(embed=embed, view=view)
         view.on_timeout = lambda: self.disable_view(view)
@@ -204,7 +205,7 @@ class Form:
         view = View()
 
         self.title = "Wasureta 설명서"
-        self.message += "### 기본 명령어\n"
+        self.message += "### 🎵 기본 명령어\n"
         self.message += "**`/play`**\n 유튜브 링크(플리도 가능), 검색어를 통해서 노래를 추가한다.\n"
         self.message += "**`/skip`**\n 현재 재생 중인 음악을 스킵한다.\n"
         self.message += "**`/pause`**\n 재생을 일시정지/재시작한다.\n"
@@ -215,21 +216,22 @@ class Form:
         self.message += "**`/jump`** `HH:MM:SS`\n 재생 중인 곡의 특정 시간으로 이동합니다.\n(예: `/jump 12:34` → 12분 34초로 이동)\n"
         self.message += "\n"
 
-        self.message += "### 통계 명령어\n"
-        self.message += "**`/last-played`**\n 서버에서 가장 마지막으로 틀었던 노래의 정보를 제공한다.\n"
-        self.message += "**`/ranking`**\n \n"
-        self.message += "**`/search-server-top10`**\n \n"
-        self.message += "**`/search-user-top10`**\n \n"
-        self.message += "**`/how-many-played`**\n \n"
-        self.message += "**`/playlist`**\n \n"
+        self.message += "### 📊 통계 명령어\n"
+        self.message += "**`/last-played`**\n 서버에서 가장 마지막으로 들었던 노래의 정보를 제공한다.\n"
+        self.message += "**`/ranking` `(신청곡 수 순) / (감상 시간 순)`**\n 서버에서 멤버들의 신청곡 수 또는 음악감상 시간 순위를 제공한다.\n"
+        self.message += "**`/search-server-top10`**\n 서버에서 가장 많이 재생된 노래 순위를 제공한다.\n"
+        self.message += "**`/search-user-top10` `유저이름`**\n 서버에서 해당 유저가 가장 많이 재생한 노래 순위를 제공한다.\n"
+        self.message += "**`/playlist` `유저이름(기본값:서버전체)` `검색 마지막 순위(기본값:50)`**\n 서버에서 재생된 노래를 바탕으로 랜덤 플레이리스트를 만들어준다.\n"
+        self.message += "\n"
 
-        self.message += "### 시그니처 명령어\n"
-        self.message += "**`/wasu`**\n wasureta원곡 또는 리엑션을 들을 수 있다.\n"
+        self.message += "### 📝 시그니처 명령어\n"
+        self.message += "**`/wasu` `(원곡) / (신원미상 반응)`**\n wasureta원곡 또는 리엑션을 들을 수 있다.\n"
         self.message += "**`/swms`**\n 신원미상의 유튜브 영상 중 랜덤영상을 들려준다.\n"
+        self.message += "\n"
 
-        self.message += "### 부가 명령어\n"
+        self.message += "### ➕ 부가 명령어\n"
         self.message += "**`/---`**\n 선을 그린다.\n"
         self.message += "**`/ping`**\n ping을 날린다.\n"
 
-        embed = discord.Embed(title=self.title, description=self.message)
+        embed = discord.Embed(title=self.title, description=self.message, color=self.color)
         self.obj = await ctx.send(embed=embed, view=view)

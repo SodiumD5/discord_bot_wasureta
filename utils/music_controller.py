@@ -4,14 +4,14 @@ import random
 import functools, time, discord, yt_dlp
 from data.guild import Guild, Song
 from utils.forms import Form
+from database.database_insert import database_insert
 
 
 # 얘는 하나의 guild의 재생을 담당함. 메세지는 리턴으로 주기
 class MusicPlayer:
-    def __init__(self, guild_id, voice_client):
-        self.guild_id = guild_id
+    def __init__(self, guild, voice_client):
         self.voice_client = voice_client
-        self.guild = Guild()
+        self.guild = Guild(guild)
         self.reset_option()
 
     def reset_option(self):
@@ -105,6 +105,7 @@ class MusicPlayer:
         await asyncio.sleep(0)
         song_data.start_time = time.time()
         self.voice_client.play(song_data.audio_source, after=after_playing)
+        database_insert.record_music_played(self.guild)
 
     async def keyword_search_youtube(self, query, max_results=5):
         self.YT_OPTIONS = {
@@ -154,10 +155,11 @@ class MusicController:
     def __init__(self):
         self.players = {}
 
-    def get_player(self, guild_id, voice_client) -> MusicPlayer:
+    def get_player(self, guild, voice_client) -> MusicPlayer:
         """길드별 플레이어 가져오기"""
+        guild_id = guild.id
         if guild_id not in self.players:
-            self.players[guild_id] = MusicPlayer(guild_id, voice_client)
+            self.players[guild_id] = MusicPlayer(guild, voice_client)
         else:
             self.players[guild_id].voice_client = voice_client
         return self.players[guild_id]
@@ -178,7 +180,7 @@ class MusicController:
         """채널연결과 guild의 player로 매칭시켜서 재생"""
         if not await self._check_voice_channel(ctx):
             return
-        player = self.get_player(ctx.guild.id, ctx.voice_client)
+        player = self.get_player(ctx.guild, ctx.voice_client)
 
         if "https://www.youtube.com/" in search or "https://youtu.be/" in search:  # url일 경우
             if "list=" in search:  # 플레이리스트일 경우
@@ -195,10 +197,10 @@ class MusicController:
             await form.show5_music(ctx, insert_pos)  # 재생하는거도 포함되있음
 
     async def skip(self, ctx):
-        player = self.get_player(ctx.guild.id, ctx.voice_client)
+        player = self.get_player(ctx.guild, ctx.voice_client)
 
         if player.voice_client and player.voice_client.is_playing():
-            will_disconnect = player.guild.is_queue_empty()
+            will_disconnect = player.guild.is_queue_empty() and player.guild.repeat == "반복 안 함"
             player.voice_client.stop()
             if will_disconnect:
                 player.voice_client = ctx.voice_client
@@ -212,7 +214,7 @@ class MusicController:
             await form.smart_send(ctx)
 
     async def pause(self, ctx):
-        player = self.get_player(ctx.guild.id, ctx.voice_client)
+        player = self.get_player(ctx.guild, ctx.voice_client)
         if player.voice_client.is_playing():
             player.voice_client.pause()
             player.guild.now_playing.pause(pause_start=True)
@@ -225,7 +227,7 @@ class MusicController:
             await form.smart_send(ctx)
 
     async def refresh_que(self, ctx, is_leave=False):  # refresh_que와 leave명령어가 사실상 같음.
-        player = self.get_player(ctx.guild.id, ctx.voice_client)
+        player = self.get_player(ctx.guild, ctx.voice_client)
 
         if ctx.author.voice and player.voice_client and player.voice_client.is_playing():
             player.guild.queue = deque()
@@ -239,7 +241,7 @@ class MusicController:
             await form.smart_send(ctx)
 
             if is_leave:
-                await player.voice_client.stop()
+                player.voice_client.stop()
                 player.voice_client = ctx.voice_client
         else:
             if is_leave:
@@ -251,7 +253,7 @@ class MusicController:
             await form.smart_send(ctx)
 
     async def que(self, ctx):
-        player = self.get_player(ctx.guild.id, ctx.voice_client)
+        player = self.get_player(ctx.guild, ctx.voice_client)
 
         if ctx.guild.voice_client and player.voice_client.is_playing():
             message = player.guild.now_playing.song_info()
@@ -262,7 +264,7 @@ class MusicController:
             await form.smart_send(ctx)
 
     async def repeat_control(self, ctx):
-        player = self.get_player(ctx.guild.id, ctx.voice_client)
+        player = self.get_player(ctx.guild, ctx.voice_client)
 
         if not (ctx.author.voice and ctx.guild.voice_client and player.voice_client.is_playing()):
             form = Form("먼저 재생을 시작하세요.")
@@ -277,7 +279,7 @@ class MusicController:
 
     async def jump(self, ctx, jump_to: str):
         try:
-            player = self.get_player(ctx.guild.id, ctx.voice_client)
+            player = self.get_player(ctx.guild, ctx.voice_client)
 
             if not (ctx.author.voice and ctx.guild.voice_client and player.voice_client.is_playing()):
                 form = Form("먼저 재생을 시작하세요.")
@@ -303,7 +305,7 @@ class MusicController:
         if not await self._check_voice_channel(ctx):
             return
 
-        player = self.get_player(ctx.guild.id, ctx.voice_client)
+        player = self.get_player(ctx.guild, ctx.voice_client)
         player.FFMPEG_OPTIONS["options"] = "-vn -loglevel debug -af volume=2"  # 볼륨 키우기
 
         if option == "원곡":
@@ -323,7 +325,7 @@ class MusicController:
             return
 
         swms_playlist = "https://www.youtube.com/playlist?list=UUhoPhrRvzjAz_qagqCJAAJA"
-        player = self.get_player(ctx.guild.id, ctx.voice_client)
+        player = self.get_player(ctx.guild, ctx.voice_client)
         player.FFMPEG_OPTIONS["options"] = "-vn -loglevel debug -af volume=2"  # 볼륨 키우기
 
         loop = asyncio.get_event_loop()

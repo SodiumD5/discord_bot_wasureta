@@ -32,10 +32,6 @@ class InfoCommands(commands.Cog):
     async def find_user(self, ctx, user_name: str = None):
         await ctx.defer()
 
-    @commands.hybrid_command(name="how-many-played", description="노래 제목을 입력하면, 그 노래가 해당서버에서 재생된 횟수를 알려준다.")
-    async def how_many_played(self, ctx, title: str):
-        await ctx.defer()
-
     @commands.hybrid_command(name="playlist", description="해당 유저가 많이 틀었던 노래 플레이리스트를 랜덤으로 뽑아준다.")
     @app_commands.describe(
         user_name="누구의 플리를 찾을 지 입력 (기본 값 : 서버 전체)",

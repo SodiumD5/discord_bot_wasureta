@@ -1,0 +1,206 @@
+import os
+from dotenv import load_dotenv
+import mysql.connector
+from mysql.connector import Error
+
+class DatabaseInit:
+    def __init__(self):
+        """MySQL 데이터베이스 연결"""
+        try:
+            load_dotenv()
+            MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
+            self.connection = mysql.connector.connect(host="localhost", user="root", password=MYSQL_PASSWORD)
+
+            if self.connection.is_connected():
+                cursor = self.connection.cursor()
+                cursor.execute(
+                    """
+                    CREATE DATABASE IF NOT EXISTS wasureta 
+                    CHARACTER SET utf8mb4 
+                    COLLATE utf8mb4_unicode_ci
+                    """
+                )
+                cursor.execute("USE wasureta")
+                cursor.close()
+        except Error as e:
+            print(f"데이터베이스 연결 실패: {e}")
+            return None
+
+
+    def create_tables(self):
+        """테이블 생성"""
+        if not self.connection:
+            return
+        
+        cursor = self.connection.cursor()
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+        tables = {}
+
+        # Songs 테이블
+        tables[
+            "Songs"
+        ] = """
+        CREATE TABLE IF NOT EXISTS Songs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            youtube_url VARCHAR(255) UNIQUE NOT NULL,
+            title VARCHAR(500) NOT NULL,
+            duration INT NOT NULL COMMENT 'seconds',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_youtube_url (youtube_url),
+            INDEX idx_title (title)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """
+
+        # Users 테이블
+        tables[
+            "Users"
+        ] = """
+        CREATE TABLE IF NOT EXISTS Users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) UNIQUE NOT NULL COMMENT '사용자 고유 식별자',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_name (name)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """
+
+        # Servers 테이블
+        tables[
+            "Servers"
+        ] = """
+        CREATE TABLE IF NOT EXISTS Servers (
+            server_id BIGINT PRIMARY KEY COMMENT '서버 고유 식별자',
+            server_name VARCHAR(255) NOT NULL COMMENT '서버 이름',
+            last_played_song_id INT,
+            last_played_user_id INT,
+            last_played_at TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (last_played_song_id) REFERENCES Songs(id) ON DELETE SET NULL,
+            FOREIGN KEY (last_played_user_id) REFERENCES Users(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """
+
+        # ServerMembers 테이블
+        tables[
+            "ServerMembers"
+        ] = """
+        CREATE TABLE IF NOT EXISTS ServerMembers (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            server_id BIGINT NOT NULL,
+            user_id INT NOT NULL,
+            display_name VARCHAR(255) NOT NULL COMMENT '해당 서버에서의 사용자 표시 이름',
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY idx_server_user (server_id, user_id),
+            INDEX idx_server_id (server_id),
+            INDEX idx_user_id (user_id),
+            FOREIGN KEY (server_id) REFERENCES Servers(server_id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """
+
+        # PlayHistory 테이블
+        tables[
+            "PlayHistory"
+        ] = """
+        CREATE TABLE IF NOT EXISTS PlayHistory (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            server_id BIGINT NOT NULL,
+            song_id INT NOT NULL,
+            user_id INT NOT NULL,
+            played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            INDEX idx_server_played_at (server_id, played_at),
+            INDEX idx_server_song (server_id, song_id),
+            INDEX idx_server_user (server_id, user_id),
+            INDEX idx_user_played_at (user_id, played_at),
+            INDEX idx_song_id (song_id),
+            FOREIGN KEY (server_id) REFERENCES Servers(server_id) ON DELETE CASCADE,
+            FOREIGN KEY (song_id) REFERENCES Songs(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """
+
+        # DailyPlayStats 테이블
+        tables[
+            "DailyPlayStats"
+        ] = """
+        CREATE TABLE IF NOT EXISTS DailyPlayStats (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            server_id BIGINT NOT NULL,
+            user_id INT NOT NULL,
+            date DATE NOT NULL COMMENT '재생 날짜',
+            total_duration INT NOT NULL DEFAULT 0 COMMENT '해당 날짜의 총 재생 시간(초)',
+            UNIQUE INDEX idx_server_user_date (server_id, user_id, date),
+            INDEX idx_server_date (server_id, date),
+            INDEX idx_user_date (user_id, date),
+            FOREIGN KEY (server_id) REFERENCES Servers(server_id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """
+
+        # 테이블 생성 실행
+        for table_name, create_statement in tables.items():
+            try:
+                cursor.execute(create_statement)
+                print(f"{table_name} 테이블 생성 완료")
+            except Error as e:
+                print(f"{table_name} 테이블 생성 실패: {e}")
+
+        # 외래키 제약조건 체크 활성화
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+        self.connection.commit()
+        cursor.close()
+        print("\n모든 테이블 생성 완료!")
+
+
+    def show_tables(self):
+        """생성된 테이블 목록 확인"""
+        if not self.connection:
+            return
+        
+        cursor = self.connection.cursor()
+        cursor.execute("SHOW TABLES")
+        tables = cursor.fetchall()
+
+        print("\n=== 생성된 테이블 목록 ===")
+        for table in tables:
+            print(f"- {table[0]}")
+        print()
+        cursor.close()
+
+
+    def drop_tables(self):
+        """모든 테이블 삭제"""
+        if not self.connection:
+            return
+        
+        cursor = self.connection.cursor()
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+
+        # 삭제할 테이블 목록
+        tables = ["DailyPlayStats", "PlayHistory", "ServerMembers", "Servers", "Users", "Songs"]
+
+        print("\n=== 테이블 삭제 시작 ===")
+        for table_name in tables:
+            try:
+                cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+                print(f"{table_name} 테이블 삭제 완료")
+            except Error as e:
+                print(f"{table_name} 테이블 삭제 실패: {e}")
+
+        # 외래키 제약조건 체크 활성화
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+        self.connection.commit()
+        cursor.close()
+        print("\n모든 테이블 삭제 완료!\n")
+
+
+    def database_init(self):
+        if self.connection:
+            self.create_tables()
+            self.show_tables()
+            self.connection.close()
+
+setting = DatabaseInit()
+
+if __name__ == "__main__":
+    DBsetting = DatabaseInit()
+    DBsetting.database_init()
