@@ -2,6 +2,7 @@ import asyncio
 from collections import deque
 import functools
 import random
+from utils.error_controller import error_handler
 from utils.forms import Form
 from utils.music_player import MusicPlayer
 
@@ -20,6 +21,7 @@ class MusicController:
             self.players[guild_id].voice_client = voice_client
         return self.players[guild_id]
 
+    @error_handler(caller_name="play")
     async def play(self, ctx, search):
         """채널연결과 guild의 player로 매칭시켜서 재생"""
         player = self.get_player(ctx.guild, ctx.voice_client)
@@ -38,6 +40,7 @@ class MusicController:
             form = Form(message=message, data=search_output, title=f"{search} 검색결과", guild=player.guild, player=player)
             await form.show_list_view(ctx=ctx, number_of_button=len(search_output) + 1)  # 재생하는거도 포함되있음
 
+    @error_handler(caller_name="skip")
     async def skip(self, ctx):
         player = self.get_player(ctx.guild, ctx.voice_client)
 
@@ -55,6 +58,7 @@ class MusicController:
             form = Form("현재 재생 중이 아니거나, 통화방에 없습니다.")
             await form.smart_send(ctx)
 
+    @error_handler(caller_name="pause")
     async def pause(self, ctx):
         player = self.get_player(ctx.guild, ctx.voice_client)
         if player.voice_client.is_playing():
@@ -68,6 +72,7 @@ class MusicController:
             form = Form("노래를 다시 재생합니다.")
             await form.smart_send(ctx)
 
+    @error_handler(caller_name="refresh_que")
     async def refresh_que(self, ctx, is_leave=False):  # refresh_que와 leave명령어가 사실상 같음.
         player = self.get_player(ctx.guild, ctx.voice_client)
         player.guild.queue = deque()
@@ -86,12 +91,14 @@ class MusicController:
             form = Form(message)
             await form.smart_send(ctx)
 
+    @error_handler(caller_name="que")
     async def que(self, ctx):
         player = self.get_player(ctx.guild, ctx.voice_client)
         message = player.guild.now_playing.song_info()
         form = Form(message=message, title=f"대기열 총 {player.guild.get_queue_length()}곡", guild=player.guild, player=player)
         await form.show_queue(ctx, page=0)
 
+    @error_handler(caller_name="repeat_control")
     async def repeat_control(self, ctx, repeat):
         player = self.get_player(ctx.guild, ctx.voice_client)
 
@@ -108,6 +115,7 @@ class MusicController:
         form = Form("올바른 입력이 아닙니다.")
         await form.smart_send(ctx)
 
+    @error_handler(caller_name="jump")
     async def jump(self, ctx, jump_to: str):
         try:
             player = self.get_player(ctx.guild, ctx.voice_client)
@@ -128,6 +136,7 @@ class MusicController:
             await self._invalid_input(ctx)
             print(e)
 
+    @error_handler(caller_name="wasu")
     async def wasu(self, ctx, option):
         player = self.get_player(ctx.guild, ctx.voice_client)
         player.FFMPEG_OPTIONS["options"] = "-vn -loglevel debug -af volume=2"  # 볼륨 키우기
@@ -139,11 +148,13 @@ class MusicController:
             player.FFMPEG_OPTIONS["before_options"] = "-ss 54 -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"  # 54초부터가 반응임
             swms_url = "https://www.youtube.com/watch?v=Qk1wGwRE2uI"
             message = await player.append_queue(url=swms_url, applicant=ctx.author, pos=0)
+            player.guild.now_playing.played_time = 54
 
         form = Form(message)
         await form.smart_send(ctx)
         player.reset_option()
 
+    @error_handler(caller_name="swms")
     async def swms(self, ctx):
         swms_playlist = "https://www.youtube.com/playlist?list=UUhoPhrRvzjAz_qagqCJAAJA"
         player = self.get_player(ctx.guild, ctx.voice_client)

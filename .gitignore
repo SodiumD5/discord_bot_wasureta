@@ -2,5 +2,4 @@
 __pycache__/
 *.pyc
 settings.json
-keyWasu.pem
-cookies.txt
+Error.txt

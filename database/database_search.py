@@ -7,11 +7,11 @@ class DatabaseSearch(DatabaseInit):
         super().__init__()
 
     def get_last_played_song(self, server_id: int):
-        if not self.connection:
-            return None
+        if not self.reconnect():
+            return
 
-        cursor = self.connection.cursor(dictionary=True)
         try:
+            cursor = self.connection.cursor(dictionary=True)
             query = """
                 SELECT 
                     s.id,
@@ -39,11 +39,11 @@ class DatabaseSearch(DatabaseInit):
             cursor.close()
 
     def get_top_users(self, server_id: int, limit: int = 10):
-        if not self.connection:
-            return None
+        if not self.reconnect():
+            return
 
-        cursor = self.connection.cursor(dictionary=True)
         try:
+            cursor = self.connection.cursor(dictionary=True)
             query = """
                 SELECT 
                     sm.display_name,
@@ -69,11 +69,11 @@ class DatabaseSearch(DatabaseInit):
             cursor.close()
 
     def get_top_songs(self, server_id: int, limit: int = 10):
-        if not self.connection:
-            return None
+        if not self.reconnect():
+            return
 
-        cursor = self.connection.cursor(dictionary=True)
         try:
+            cursor = self.connection.cursor(dictionary=True)
             query = """
                 SELECT 
                     s.id,
@@ -99,11 +99,11 @@ class DatabaseSearch(DatabaseInit):
             cursor.close()
 
     def get_top_songs_by_user(self, server_id: int, display_name: str, limit: int = 10):
-        if not self.connection:
-            return None
+        if not self.reconnect():
+            return
 
-        cursor = self.connection.cursor(dictionary=True)
         try:
+            cursor = self.connection.cursor(dictionary=True)
             query = """
                 SELECT 
                     s.id,

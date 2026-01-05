@@ -1,16 +1,22 @@
-import os
+import os, time
 from dotenv import load_dotenv
 import mysql.connector
 from mysql.connector import Error
+from utils.error_controller import report
 
 
 class DatabaseInit:
     def __init__(self):
+        self.connection = None
+        self.last_ping = time.time()
+        self._connect()
+
+    def _connect(self):
         """MySQL 데이터베이스 연결"""
         try:
             load_dotenv()
             MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
-            self.connection = mysql.connector.connect(host="localhost", user="root", password=MYSQL_PASSWORD)
+            self.connection = mysql.connector.connect(host="localhost", user="root", password=MYSQL_PASSWORD, autocommit=False, pool_name="wasureta_pool", pool_size=5)
 
             if self.connection.is_connected():
                 cursor = self.connection.cursor()
@@ -23,9 +29,21 @@ class DatabaseInit:
                 )
                 cursor.execute("USE wasureta")
                 cursor.close()
+            return True
         except Error as e:
-            print(f"데이터베이스 연결 실패: {e}")
-            return None
+            report.error_record(caller="DB_connect", error=e, is_db_error=True)
+            return False
+
+    def reconnect(self):
+        if time.time() - self.last_ping > 3600:
+            self.connection.ping(reconnect=True)
+            self.last_ping = time.time()
+
+        # 재연결시도
+        if not self.connection or not self.connection.is_connected():
+            return self._connect()
+
+        return True
 
     def create_tables(self):
         """테이블 생성"""
@@ -37,7 +55,9 @@ class DatabaseInit:
         tables = {}
 
         # Songs 테이블
-        tables["Songs"] = """
+        tables[
+            "Songs"
+        ] = """
         CREATE TABLE IF NOT EXISTS Songs (
             id VARCHAR(20) PRIMARY KEY COMMENT 'YouTube 비디오 ID',
             youtube_url VARCHAR(255) UNIQUE NOT NULL,
@@ -50,7 +70,9 @@ class DatabaseInit:
         """
 
         # Users 테이블 - name을 PK로 변경
-        tables["Users"] = """
+        tables[
+            "Users"
+        ] = """
         CREATE TABLE IF NOT EXISTS Users (
             name VARCHAR(255) PRIMARY KEY COMMENT '사용자 고유 식별자',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -58,7 +80,9 @@ class DatabaseInit:
         """
 
         # Servers 테이블 - user_id 대신 user_name 사용
-        tables["Servers"] = """
+        tables[
+            "Servers"
+        ] = """
         CREATE TABLE IF NOT EXISTS Servers (
             server_id BIGINT PRIMARY KEY COMMENT '서버 고유 식별자',
             server_name VARCHAR(255) NOT NULL COMMENT '서버 이름',
@@ -72,7 +96,9 @@ class DatabaseInit:
         """
 
         # ServerMembers 테이블 - user_id 대신 user_name 사용
-        tables["ServerMembers"] = """
+        tables[
+            "ServerMembers"
+        ] = """
         CREATE TABLE IF NOT EXISTS ServerMembers (
             id INT AUTO_INCREMENT PRIMARY KEY,
             server_id BIGINT NOT NULL,
@@ -88,7 +114,9 @@ class DatabaseInit:
         """
 
         # PlayHistory 테이블 - user_id 대신 user_name 사용
-        tables["PlayHistory"] = """
+        tables[
+            "PlayHistory"
+        ] = """
         CREATE TABLE IF NOT EXISTS PlayHistory (
             id BIGINT AUTO_INCREMENT PRIMARY KEY,
             server_id BIGINT NOT NULL,
@@ -107,7 +135,9 @@ class DatabaseInit:
         """
 
         # DailyPlayStats 테이블 - user_id 대신 user_name 사용
-        tables["DailyPlayStats"] = """
+        tables[
+            "DailyPlayStats"
+        ] = """
         CREATE TABLE IF NOT EXISTS DailyPlayStats (
             id BIGINT AUTO_INCREMENT PRIMARY KEY,
             server_id BIGINT NOT NULL,

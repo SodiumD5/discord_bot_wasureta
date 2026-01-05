@@ -4,13 +4,14 @@ from data.user import User
 from utils.forms import Form
 from utils.music_controller import music_controller
 from database.database_search import database_search
-from utils.error_controller import report
+from utils.error_controller import error_handler, report
 
 
 class InfoController:
     def __init__(self):
         pass
-
+    
+    @error_handler(caller_name="last-played")
     async def take_last_played(self, ctx):
         player = music_controller.get_player(guild=ctx.guild, voice_client=ctx.voice_client)
 
@@ -34,6 +35,7 @@ class InfoController:
         except:
             report.error_record(caller="take_last_played", error=e)
 
+    @error_handler(caller_name="ranking")
     async def take_ranking(self, ctx, order_by):
         if order_by == "신청곡 수 순위":
             results = database_search.get_top_users(server_id=ctx.guild.id)
@@ -83,9 +85,11 @@ class InfoController:
         form = Form(message=message, title=title, data=results)
         await form.show_list_view(ctx=ctx, number_of_button=len(results) + 1)
 
+    @error_handler(caller_name="search-top10")
     async def take_top_songs(self, ctx, member_name):
         await self._send_song_list(ctx=ctx, member_name=member_name, title_suffix="인기 노래 차트", ranking_count=True)
 
+    @error_handler(caller_name="playlist")
     async def make_playlist(self, ctx, member_name, limit):
         await self._send_song_list(ctx=ctx, member_name=member_name, title_suffix="랜덤 플리", ranking_count=False, limit=limit, randomize=True)
 

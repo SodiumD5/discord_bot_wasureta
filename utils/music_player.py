@@ -2,6 +2,7 @@ import asyncio
 import functools, time, discord, yt_dlp
 from data.guild import Guild, Song
 from database.database_insert import database_insert
+from utils.error_controller import report
 
 
 # 얘는 하나의 guild의 재생을 담당함. 메세지는 리턴으로 주기
@@ -26,7 +27,7 @@ class MusicPlayer:
         """노래의 정보를 추출하고 재생가능한 ffmpeg형태로 만들어서 대기열에 추가"""
         try:
             loop = asyncio.get_event_loop()
-            youtube_info = await loop.run_in_executor(None, functools.partial(self.YDL.extract_info, url, download=False))
+            youtube_info = await asyncio.wait_for(loop.run_in_executor(None, functools.partial(self.YDL.extract_info, url, download=False)), timeout=30)
 
             insert_pos = self.get_insert_pos()
             if is_playlist:
@@ -69,7 +70,7 @@ class MusicPlayer:
                 message = f"노래 제목 : {song.title} \n대기열 {insert_pos}번에 추가 되었습니다."
                 return message
         except Exception as e:
-            print(f"스킵함 : {url}\n{e}")
+            report.error_record(caller="append_queue", error=e)
             return "오류가 발생했습니다."
 
     async def play_next(self, overwrite=False):
@@ -150,4 +151,3 @@ class MusicPlayer:
         target_time_ko = self.guild.now_playing.time_to_korean(target_time)
         message = f"현재 노래를 {target_time_ko}로 건너 뜁니다."
         return message
-

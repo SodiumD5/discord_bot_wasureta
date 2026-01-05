@@ -33,8 +33,6 @@ async def on_ready():
 
     for filename in os.listdir("./cogs"):
         if filename.endswith(".py"):
-            if filename in ["youtube.py"]:
-                continue
             try:
                 await bot.load_extension(f"cogs.{filename[:-3]}")
                 print(f"{filename} : success")
@@ -46,6 +44,9 @@ async def on_ready():
         print("error_controller : success")
     except KeyboardInterrupt:
         scheduler.shutdown()
+    except Exception as e:
+        report.error_record(caller="DB_init", error=e, is_db_error=True)
+
     await bot.tree.sync()
 
 

@@ -23,6 +23,8 @@ class DatabaseInsert(DatabaseInit):
         duration = song.duration
         video_id = song.video_id
 
+        if not self.reconnect():
+            return
         try:
             cursor = self.connection.cursor()
             played_at = datetime.datetime.now()
@@ -80,17 +82,6 @@ class DatabaseInsert(DatabaseInit):
                 (server_id, video_id, user_name, played_at),
             )
 
-            # 6. DailyPlayStats 업데이트 (해당 날짜의 총 재생 시간 증가)
-            today = datetime.date.today()
-            cursor.execute(
-                """
-                INSERT INTO DailyPlayStats (server_id, user_name, date, total_duration)
-                VALUES (%s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE total_duration = total_duration + %s
-                """,
-                (server_id, user_name, today, duration, duration),
-            )
-
             self.connection.commit()
         except Exception as e:
             self.connection.rollback()
@@ -104,6 +95,8 @@ class DatabaseInsert(DatabaseInit):
         user_name = song.applicant_name
         video_id = song.video_id
 
+        if not self.reconnect():
+            return
         try:
             cursor = self.connection.cursor()
             played_at = datetime.datetime.now()
@@ -123,6 +116,46 @@ class DatabaseInsert(DatabaseInit):
         except Exception as e:
             self.connection.rollback()
             report.error_record(caller="update_server_last_play", error=e, is_db_error=True)
+        finally:
+            cursor.close()
+
+    def update_user_listen_time(self, user, server_id: int, plus_time: int):
+        if not self.reconnect():
+            return
+
+        user_name = user.name
+        display_name = user.display_name
+        try:
+            cursor = self.connection.cursor()
+
+            cursor.execute(
+                """
+                INSERT IGNORE INTO Users (name)
+                VALUES (%s)
+                """,
+                (user_name,),
+            )
+
+            cursor.execute(
+                """
+                INSERT IGNORE INTO ServerMembers (server_id, user_name, display_name)
+                VALUES (%s, %s, %s)
+                """,
+                (server_id, user_name, display_name),
+            )
+
+            cursor.execute(
+                """
+                INSERT INTO DailyPlayStats (server_id, user_name, date, total_duration)
+                VALUES (%s, %s, CURDATE(), %s)
+                ON DUPLICATE KEY UPDATE total_duration = total_duration + %s
+                """,
+                (server_id, user_name, plus_time, plus_time),
+            )
+            self.connection.commit()
+        except Exception as e:
+            self.connection.rollback()
+            report.error_record(caller="update_user_listen_time", error=e, is_db_error=True)
         finally:
             cursor.close()
 
