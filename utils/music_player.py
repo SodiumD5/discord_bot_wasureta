@@ -110,25 +110,29 @@ class MusicPlayer:
         database_insert.record_music_played(self.guild)
 
     async def keyword_search_youtube(self, query, max_results=5):
-        self.YT_OPTIONS = {
-            "quiet": True,
-            "extract_flat": True,
-            "noplaylist": True,
-        }
-        self.YDL = yt_dlp.YoutubeDL(self.YT_OPTIONS)
+        try:
+            self.YT_OPTIONS = {
+                "quiet": True,
+                "extract_flat": True,
+                "noplaylist": True,
+            }
+            self.YDL = yt_dlp.YoutubeDL(self.YT_OPTIONS)
 
-        loop = asyncio.get_event_loop()
-        youtube_info = await loop.run_in_executor(None, lambda: self.YDL.extract_info(f"ytsearch{max_results}:{query}", download=False))
-        data_entries = youtube_info["entries"]
+            loop = asyncio.get_event_loop()
+            youtube_info = await loop.run_in_executor(None, lambda: self.YDL.extract_info(f"ytsearch{max_results}:{query}", download=False))
+            data_entries = youtube_info["entries"]
 
-        search_output = [{"title": single_song["title"], "url": single_song["url"]} for single_song in data_entries]
+            search_output = [{"title": single_song["title"], "url": single_song["url"]} for single_song in data_entries]
 
-        message = ""
-        for idx in range(len(search_output)):
-            message += f"{idx+1}번 검색결과 : {search_output[idx]["title"]} \n\n"
+            message = ""
+            for idx in range(len(search_output)):
+                message += f"{idx+1}번 검색결과 : {search_output[idx]["title"]} \n\n"
 
-        self.reset_option()
-        return search_output, message
+            self.reset_option()
+            return search_output, message
+        except Exception as e:
+            self.reset_option()
+            raise Exception(f"유튜브 검색 실패: {str(e)}")
 
     async def seek_to(self, target_time: int):
         self.FFMPEG_OPTIONS["before_options"] = f"-ss {target_time} -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"

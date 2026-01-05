@@ -1,6 +1,7 @@
 import datetime
 from typing import TYPE_CHECKING
 from database.database_init import DatabaseInit
+from utils.error_controller import report
 
 if TYPE_CHECKING:
     from data.guild import Guild
@@ -11,8 +12,6 @@ class DatabaseInsert(DatabaseInit):
         super().__init__()
 
     def record_music_played(self, guild: "Guild"):
-        cursor = self.connection.cursor()
-
         server_id = guild.id
         server_name = guild.name
 
@@ -25,8 +24,9 @@ class DatabaseInsert(DatabaseInit):
         video_id = song.video_id
 
         try:
+            cursor = self.connection.cursor()
             played_at = datetime.datetime.now()
-            
+
             # 1. Songs 테이블에 노래 추가 (중복이면 무시)
             cursor.execute(
                 """
@@ -94,19 +94,18 @@ class DatabaseInsert(DatabaseInit):
             self.connection.commit()
         except Exception as e:
             self.connection.rollback()
-            print({"success": False, "error": str(e), "message": "노래 재생 기록 추가 중 오류가 발생했습니다."})
+            report.error_record(caller="record_music_played", error=e, is_db_error=True)
         finally:
             cursor.close()
 
     def update_server_last_play(self, guild: "Guild"):
-        cursor = self.connection.cursor()
-
         server_id = guild.id
         song = guild.now_playing
         user_name = song.applicant_name
         video_id = song.video_id
 
         try:
+            cursor = self.connection.cursor()
             played_at = datetime.datetime.now()
 
             # Servers 테이블의 last_played 필드들 업데이트
@@ -123,8 +122,9 @@ class DatabaseInsert(DatabaseInit):
             self.connection.commit()
         except Exception as e:
             self.connection.rollback()
-            print(f"마지막 재생 곡 업데이트 오류: {e}")
+            report.error_record(caller="update_server_last_play", error=e, is_db_error=True)
         finally:
             cursor.close()
+
 
 database_insert = DatabaseInsert()

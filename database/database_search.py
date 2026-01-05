@@ -1,4 +1,5 @@
 from database.database_init import DatabaseInit
+from utils.error_controller import report
 
 
 class DatabaseSearch(DatabaseInit):
@@ -32,7 +33,7 @@ class DatabaseSearch(DatabaseInit):
             self.connection.commit()
             return result
         except Exception as e:
-            print(f"get_last_played_song 오류: {e}")
+            report.error_record(caller="get_last_played_song", error=e, is_db_error=True)
             return None
         finally:
             cursor.close()
@@ -92,7 +93,7 @@ class DatabaseSearch(DatabaseInit):
             self.connection.commit()
             return results
         except Exception as e:
-            print(f"get_top_songs 오류 : {e}")
+            report.error_record(caller="get_top_songs", error=e, is_db_error=True)
             return None
         finally:
             cursor.close()
@@ -124,7 +125,7 @@ class DatabaseSearch(DatabaseInit):
             self.connection.commit()
             return results
         except Exception as e:
-            print(f"get_top_songs_by_user 오류 : {e}")
+            report.error_record(caller="get_top_songs_by_user", error=e, is_db_error=True)
             return None
         finally:
             cursor.close()

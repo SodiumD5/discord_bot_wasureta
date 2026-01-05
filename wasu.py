@@ -3,6 +3,7 @@ import discord
 import os
 from dotenv import load_dotenv
 from database.database_init import setting
+from utils.error_controller import report
 
 # ------ Main File (이 파일을 실행하여 봇을 시작한다.) ------
 # 권한 설정
@@ -12,6 +13,11 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
+
+
+@bot.before_invoke
+async def count_command(ctx):
+    report.command_count += 1
 
 
 @bot.event
@@ -34,6 +40,12 @@ async def on_ready():
                 print(f"{filename} : success")
             except Exception as e:
                 print(f"{filename} : {e}")
+
+    try:
+        scheduler = report.start_error_scheduler()
+        print("error_controller : success")
+    except KeyboardInterrupt:
+        scheduler.shutdown()
     await bot.tree.sync()
 
 

@@ -37,7 +37,6 @@ class Form:
 
                     self.player = music_controller.get_player(ctx.guild, ctx.voice_client)
                 message = await self.player.append_queue(url, ctx.author)
-                print(message)
 
                 if not self.player.voice_client.is_playing():
                     await self.player.play_next()
@@ -144,6 +143,36 @@ class Form:
         self.obj = await ctx.send(embed=embed, view=view)
         view.on_timeout = lambda: self.disable_view(view)
 
+    async def send_notice(self, bot, 공지범위: str):
+        async def send_to_guild(guild):
+            target_channel = None
+
+            for channel in guild.text_channels:
+                if "공지" in channel.name.lower() or "notice" in channel.name.lower():
+                    target_channel = channel
+                    break
+
+            if not target_channel:
+                target_channel = guild.text_channels[0] if guild.text_channels else None
+
+            if target_channel:
+                try:
+                    await self.basic_view(target_channel)
+                    return True
+                except discord.Forbidden:
+                    return False
+            return False
+
+        if 공지범위 == "현재서버":
+            return await send_to_guild(bot.get_guild(self.guild.id))
+
+        elif 공지범위 == "전체서버":
+            success_count = 0
+            for guild in bot.guilds:
+                if await send_to_guild(guild):
+                    success_count += 1
+            return success_count, len(bot.guilds)
+
     async def smart_send(self, ctx, message=None):
         if message != None:
             send_message = message
@@ -179,7 +208,9 @@ class Form:
         self.message += "**`/last-played`**\n 서버에서 가장 마지막으로 들었던 노래의 정보를 제공한다.\n"
         self.message += "**`/ranking` `(신청곡 수 순위) / (청취 시간 순위)`**\n 서버에서 멤버들의 신청곡 수 또는 청취 시간 순위를 제공한다.\n"
         self.message += "**`/search-top10` `멤버이름(기본값:서버전체)`**\n 한 멤버(미입력시:서버전체)가 많이 재생된 노래의 순위를 제공한다.\n(단, 멤버이름은 서버별 이름이다.)\n"
-        self.message += "**`/playlist` `멤버이름(기본값:서버전체)` `검색 마지막 순위(기본값:100)`**\n 서버에서 재생된 노래를 바탕으로 랜덤 플레이리스트를 만들어준다.\n(단, 멤버이름은 서버별 이름이다.)\n"
+        self.message += (
+            "**`/playlist` `멤버이름(기본값:서버전체)` `검색 마지막 순위(기본값:100)`**\n 서버에서 재생된 노래를 바탕으로 랜덤 플레이리스트를 만들어준다.\n(단, 멤버이름은 서버별 이름이다.)\n"
+        )
         self.message += "\n"
 
         self.message += "### 📝 시그니처 명령어\n"

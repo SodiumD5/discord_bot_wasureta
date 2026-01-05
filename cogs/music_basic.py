@@ -1,6 +1,5 @@
 from typing import Literal
 from discord.ext import commands
-from utils.forms import Form
 from utils.music_controller import music_controller
 from utils.state_checker import state_checker
 
@@ -10,8 +9,8 @@ class BasicCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    async def cog_command_error(self, error):  # discord.py 지정 handler
-        print(error)
+    async def cog_command_error(self, ctx, error):  # discord.py 지정 handler
+        print(f"BasicCommands 에러 : {error}")
 
     @commands.hybrid_command(name="play", description="유튜브 링크를 가져오면 음악을 재생한다/검색어를 입력하면 5개 중에 선택이 가능하다.")
     async def play(self, ctx, search: str):
