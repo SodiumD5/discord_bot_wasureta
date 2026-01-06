@@ -11,6 +11,7 @@ class DatabaseSearch(DatabaseInit):
             return
 
         try:
+            self.connection.commit()
             cursor = self.connection.cursor(dictionary=True)
             query = """
                 SELECT 
@@ -30,7 +31,6 @@ class DatabaseSearch(DatabaseInit):
                 """
             cursor.execute(query, (server_id,))
             result = cursor.fetchone()
-            self.connection.commit()
             return result
         except Exception as e:
             report.error_record(caller="get_last_played_song", error=e, is_db_error=True)
@@ -43,6 +43,7 @@ class DatabaseSearch(DatabaseInit):
             return
 
         try:
+            self.connection.commit()
             cursor = self.connection.cursor(dictionary=True)
             query = """
                 SELECT 
@@ -60,7 +61,6 @@ class DatabaseSearch(DatabaseInit):
                 """
             cursor.execute(query, (server_id, limit))
             results = cursor.fetchall()
-            self.connection.commit()
             return results
         except Exception as e:
             print(f"get_top_players 오류: {e}")
@@ -73,6 +73,7 @@ class DatabaseSearch(DatabaseInit):
             return
 
         try:
+            self.connection.commit()
             cursor = self.connection.cursor(dictionary=True)
             query = """
                 SELECT 
@@ -90,7 +91,6 @@ class DatabaseSearch(DatabaseInit):
                 """
             cursor.execute(query, (server_id, limit))
             results = cursor.fetchall()
-            self.connection.commit()
             return results
         except Exception as e:
             report.error_record(caller="get_top_songs", error=e, is_db_error=True)
@@ -103,6 +103,7 @@ class DatabaseSearch(DatabaseInit):
             return
 
         try:
+            self.connection.commit()
             cursor = self.connection.cursor(dictionary=True)
             query = """
                 SELECT 
@@ -122,10 +123,37 @@ class DatabaseSearch(DatabaseInit):
                 """
             cursor.execute(query, (server_id, display_name, limit))
             results = cursor.fetchall()
-            self.connection.commit()
             return results
         except Exception as e:
             report.error_record(caller="get_top_songs_by_user", error=e, is_db_error=True)
+            return None
+        finally:
+            cursor.close()
+
+    def get_guild_listen_time(self, server_id: int):
+        if not self.reconnect():
+            return
+
+        try:
+            self.connection.commit()
+            cursor = self.connection.cursor(dictionary=True)
+
+            query = """
+                SELECT 
+                    sm.display_name,
+                    SUM(dps.total_duration) AS total_listen_time
+                FROM DailyPlayStats dps
+                JOIN ServerMembers sm ON dps.server_id = sm.server_id 
+                    AND dps.user_name = sm.user_name
+                WHERE dps.server_id = %s
+                GROUP BY dps.user_name, sm.display_name
+                ORDER BY total_listen_time DESC
+                """
+            cursor.execute(query, (server_id,))
+            results = cursor.fetchall()
+            return results
+        except Exception as e:
+            report.error_record(caller="get_listen_time", error=e, is_db_error=True)
             return None
         finally:
             cursor.close()

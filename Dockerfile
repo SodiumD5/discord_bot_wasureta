@@ -1,20 +1,17 @@
-FROM python:3.9-alpine
+FROM python:3.11
 
-RUN apk add --no-cache ffmpeg opus-dev libsodium-dev python3-dev g++ make && rm -rf /var/cache/apk/*
-
-WORKDIR /app
-
-ENV LD_LIBRARY_PATH=/usr/lib
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libopus0 \
+    libsodium-dev \
+    nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-
-RUN pip install --no-cache-dir -r requirements.txt --pre
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 8080
+RUN chmod +x entrypoint.sh
 
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
-
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["./entrypoint.sh"]

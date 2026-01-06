@@ -4,11 +4,14 @@ import os
 from dotenv import load_dotenv
 from database.database_init import setting
 from utils.error_controller import report
+import discord.opus
 
 # ------ Main File (이 파일을 실행하여 봇을 시작한다.) ------
 # 권한 설정
 intents = discord.Intents.default()
 intents.message_content = True
+if not discord.opus.is_loaded():
+    discord.opus.load_opus("libopus.so.0")
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
 load_dotenv()
@@ -22,6 +25,7 @@ async def count_command(ctx):
 
 @bot.event
 async def on_ready():
+    print(f"Logged on as {bot.user}!")
     try:
         setting.database_init()
     except:
@@ -29,7 +33,6 @@ async def on_ready():
 
     activity = discord.Game(name="Wasureta 플레이 중...")
     await bot.change_presence(status=discord.Status.online, activity=activity)
-    print(f"Logged on as {bot.user}!")
 
     for filename in os.listdir("./cogs"):
         if filename.endswith(".py"):
@@ -48,6 +51,7 @@ async def on_ready():
         report.error_record(caller="DB_init", error=e, is_db_error=True)
 
     await bot.tree.sync()
+    print("wasureta ready")
 
 
 # 봇 실행

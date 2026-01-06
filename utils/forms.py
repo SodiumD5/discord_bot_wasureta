@@ -221,6 +221,8 @@ class Form:
         self.message += "### ➕ 부가 명령어\n"
         self.message += "**`/---`**\n 선을 그린다.\n"
         self.message += "**`/ping`**\n ping을 날린다.\n"
+        
+        self.message += "오류제보 : nacl12(discord name), official server, wasureta.discord@gamil.com"
 
         embed = discord.Embed(title=self.title, description=self.message, color=self.color)
         self.obj = await ctx.send(embed=embed, view=view)

@@ -1,7 +1,7 @@
+discord.py>=2.3.0
+yt-dlp>=2024.0.0
+mysql-connector-python>=8.0.0
+python-dotenv>=1.0.0
+APScheduler>=3.10.0
+PyNacl
 discord.py[voice]
-discord
-python-dotenv
-yt-dlp[default]
-supabase
-Flask
-PyNaCl

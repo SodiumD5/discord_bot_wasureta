@@ -1,6 +1,7 @@
 import asyncio
 import functools, time, discord, yt_dlp
-from data.guild import Guild, Song
+from data.guild import Guild
+from data.song import Song, time_to_korean
 from database.database_insert import database_insert
 from utils.error_controller import report
 
@@ -15,7 +16,7 @@ class MusicPlayer:
     def reset_option(self):
         self.YT_OPTIONS = {"format": "bestaudio/best", "extract_flat": "in_playlist", "ratelimit": "0", "playlistend": 20}
         self.YDL = yt_dlp.YoutubeDL(self.YT_OPTIONS)
-        self.FFMPEG_OPTIONS = {"before_options": "-ss 0 -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5", "options": "-vn -loglevel debug -af volume=1"}
+        self.FFMPEG_OPTIONS = {"before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -probesize 200000 -analyzeduration 0", "options": "-vn -bufsize 64k"}
 
     def get_insert_pos(self):
         insert_pos = self.guild.get_queue_length()
@@ -56,7 +57,7 @@ class MusicPlayer:
             else:
                 stream_url = youtube_info["url"]
 
-                audio_source = discord.FFmpegPCMAudio(stream_url, **self.FFMPEG_OPTIONS)
+                audio_source = discord.FFmpegOpusAudio(stream_url, **self.FFMPEG_OPTIONS)
                 song = Song(youtube_url=url, video_info=youtube_info, audio_source=audio_source, applicant=applicant)
 
                 self.guild.add_queue(data=song, pos=pos)
@@ -92,7 +93,7 @@ class MusicPlayer:
                 database_insert.update_server_last_play(self.guild)
 
             if self.guild.repeat != "반복 안 함":
-                audio_source = discord.FFmpegPCMAudio(self.guild.now_playing.stream_url, **self.FFMPEG_OPTIONS)
+                audio_source = discord.FFmpegOpusAudio(self.guild.now_playing.stream_url, **self.FFMPEG_OPTIONS)
                 self.guild.now_playing.audio_source = audio_source
                 if self.guild.repeat == "현재 곡 반복":
                     self.guild.add_queue(self.guild.now_playing, pos=0)
@@ -127,7 +128,7 @@ class MusicPlayer:
 
             message = ""
             for idx in range(len(search_output)):
-                message += f"{idx+1}번 검색결과 : {search_output[idx]["title"]} \n\n"
+                message += f"{idx+1}번 검색결과 : {search_output[idx]['title']} \n\n"
 
             self.reset_option()
             return search_output, message
@@ -139,7 +140,7 @@ class MusicPlayer:
         self.FFMPEG_OPTIONS["before_options"] = f"-ss {target_time} -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
 
         now_playing = self.guild.now_playing
-        audio_source = discord.FFmpegPCMAudio(now_playing.stream_url, **self.FFMPEG_OPTIONS)
+        audio_source = discord.FFmpegOpusAudio(now_playing.stream_url, **self.FFMPEG_OPTIONS)
         self.guild.now_playing.audio_source = audio_source
         self.reset_option()
 
@@ -148,6 +149,6 @@ class MusicPlayer:
         await self.play_next(overwrite=True)
         self.guild.now_playing.jump(target_time=target_time)
 
-        target_time_ko = self.guild.now_playing.time_to_korean(target_time)
+        target_time_ko = time_to_korean(target_time)
         message = f"현재 노래를 {target_time_ko}로 건너 뜁니다."
         return message

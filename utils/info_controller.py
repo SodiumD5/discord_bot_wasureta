@@ -1,5 +1,5 @@
 import random
-from data.guild import Song
+from data.song import Song, time_to_korean
 from data.user import User
 from utils.forms import Form
 from utils.music_controller import music_controller
@@ -10,7 +10,7 @@ from utils.error_controller import error_handler, report
 class InfoController:
     def __init__(self):
         pass
-    
+
     @error_handler(caller_name="last-played")
     async def take_last_played(self, ctx):
         player = music_controller.get_player(guild=ctx.guild, voice_client=ctx.voice_client)
@@ -32,7 +32,7 @@ class InfoController:
             message = last_song.song_info(caller="last-played")
             form = Form(message=message, title=f"마지막 재생 곡", guild=player.guild, player=player)
             await form.show_last_played(ctx)
-        except:
+        except Exception as e:
             report.error_record(caller="take_last_played", error=e)
 
     @error_handler(caller_name="ranking")
@@ -43,11 +43,18 @@ class InfoController:
             title = f"{ctx.guild.name} 서버 신청곡 수 순위"
             message = ""
             for idx, result in enumerate(results):
-                message += f"**{idx+1}위. {result['display_name']} : {result['play_count']}번 재생됨**\n\n"
+                message += f"**{idx+1}위. {result['display_name']} : {result['play_count']}번 재생함**\n\n"
             form = Form(message=message, title=title)
             await form.basic_view(ctx)
         elif order_by == "청취 시간 순위":
-            form = Form(message="아몰랑~", title="아직 안 만듬")
+            results = database_search.get_guild_listen_time(server_id=ctx.guild.id)
+
+            title = f"{ctx.guild.name} 서버 청취 시간 순위"
+            message = ""
+            for idx, result in enumerate(results):
+                total_listen_time_ko = time_to_korean(result["total_listen_time"])
+                message += f"**{idx+1}위. {result['display_name']}의 청취 시간 : {total_listen_time_ko}**\n\n"
+            form = Form(message=message, title=title)
             await form.basic_view(ctx)
 
     def _format_song_message(self, results, ranking_count=True):

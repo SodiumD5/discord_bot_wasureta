@@ -15,8 +15,9 @@ class DatabaseInit:
         """MySQL 데이터베이스 연결"""
         try:
             load_dotenv()
+            MYSQL_HOST = os.getenv(key="MYSQL_HOST", default="localhost")  # 로컬에선 default로 씀
             MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
-            self.connection = mysql.connector.connect(host="localhost", user="root", password=MYSQL_PASSWORD, autocommit=False, pool_name="wasureta_pool", pool_size=5)
+            self.connection = mysql.connector.connect(host=MYSQL_HOST, user="root", password=MYSQL_PASSWORD, autocommit=False, pool_name="wasureta_pool", pool_size=5)
 
             if self.connection.is_connected():
                 cursor = self.connection.cursor()

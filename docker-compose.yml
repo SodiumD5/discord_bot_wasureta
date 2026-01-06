@@ -1,0 +1,19 @@
+services:
+  wasureta:
+    build: .
+    container_name: wasureta
+    volumes:
+      - ./cogs:/app/cogs
+      - ./utils:/app/utils
+      - ./database:/app/database
+      - ./data:/app/data
+      - ./wasu.py:/app/wasu.py
+      - ./Error.txt:/app/Error.txt
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Seoul
+      - MYSQL_HOST=host.docker.internal
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - TOKEN=${TOKEN}
+      - EMAIL=${EMAIL}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD}

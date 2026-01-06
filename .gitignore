@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 settings.json
 Error.txt
+code_counter.py
+.prettierignore
