@@ -17,7 +17,15 @@ class DatabaseInit:
             load_dotenv()
             MYSQL_HOST = os.getenv(key="MYSQL_HOST", default="localhost")  # 로컬에선 default로 씀
             MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
-            self.connection = mysql.connector.connect(host=MYSQL_HOST, user="root", password=MYSQL_PASSWORD, autocommit=False, pool_name="wasureta_pool", pool_size=5)
+            self.connection = mysql.connector.connect(
+                host=MYSQL_HOST,
+                user="root",
+                password=MYSQL_PASSWORD,
+                database="wasureta",
+                autocommit=False,
+                pool_name="wasureta_pool",
+                pool_size=5,
+            )
 
             if self.connection.is_connected():
                 cursor = self.connection.cursor()
@@ -36,15 +44,17 @@ class DatabaseInit:
             return False
 
     def reconnect(self):
-        if time.time() - self.last_ping > 3600:
-            self.connection.ping(reconnect=True)
-            self.last_ping = time.time()
+        try:
+            if not self.connection or not self.connection.is_connected():
+                return self._connect()
 
-        # 재연결시도
-        if not self.connection or not self.connection.is_connected():
+            if time.time() - self.last_ping > 600:
+                self.connection.ping(reconnect=True)
+                self.last_ping = time.time()
+
+            return True
+        except Error:
             return self._connect()
-
-        return True
 
     def create_tables(self):
         """테이블 생성"""

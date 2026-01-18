@@ -26,7 +26,7 @@ class MusicController:
         """채널연결과 guild의 player로 매칭시켜서 재생"""
         player = self.get_player(ctx.guild, ctx.voice_client)
 
-        if "https://www.youtube.com/" in search or "https://youtu.be/" in search:  # url일 경우
+        if "https://www.youtube.com/" in search or "https://youtu.be/" in search or "https://m.youtube.com" in search:  # url일 경우
             if "list=" in search:  # 플레이리스트일 경우
                 message = await player.append_queue(search, ctx.author, True)  # 플리일 경우 재생하는거도 포함되있음
                 form = Form(message)

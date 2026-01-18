@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import functools
 from apscheduler.schedulers.background import BackgroundScheduler
 from email.mime.multipart import MIMEMultipart
@@ -71,7 +71,7 @@ class ErrorController:
             msg = MIMEMultipart()
             msg["From"] = self.EMAIL
             msg["TO"] = self.EMAIL
-            msg["Subject"] = f"{date.today()} 오류 보고"  # 제목
+            msg["Subject"] = f"{date.today()-timedelta(days=1)} 오류 보고"  # 제목
             msg.attach(MIMEText(error_message, "plain", "utf-8"))
 
             server = smtplib.SMTP("smtp.gmail.com", 587)
